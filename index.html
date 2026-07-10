@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Régimen + Tilt · Nasdaq-100</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f7f7f4; --panel:#ffffff; --ink:#16181d; --muted:#6b7280;
+    --line:#e6e6e0; --accent:#0d9488; --accent-soft:rgba(13,148,136,.12);
+    --bh:#c2703d; --flat:#9aa0a6; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 20px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-bottom:6px}
+  h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0}
+  .sub{color:var(--muted);font-size:13px}
+  .asof{margin-left:auto;color:var(--muted);font-size:12px;font-family:var(--mono)}
+
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0 10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:18px 20px;box-shadow:var(--shadow)}
+  .card .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .card .val{font-family:var(--mono);font-size:34px;font-weight:600;margin-top:6px;
+             letter-spacing:-.02em;line-height:1}
+  .card .foot{font-size:12px;color:var(--muted);margin-top:8px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;
+        font-weight:600;font-family:var(--mono)}
+  .pill.alc{background:var(--accent-soft);color:var(--accent)}
+  .pill.baj{background:#fdeceb;color:#c0392b}
+
+  .barwrap{margin-top:10px;height:8px;background:#eee;border-radius:999px;overflow:hidden}
+  .barfill{height:100%;background:var(--accent);border-radius:999px}
+
+  .tf{display:flex;gap:6px;margin:26px 0 14px}
+  .tf button{font:inherit;font-size:13px;padding:6px 14px;border:1px solid var(--line);
+             background:var(--panel);color:var(--muted);border-radius:9px;cursor:pointer;
+             transition:.12s}
+  .tf button:hover{color:var(--ink)}
+  .tf button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .chartbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+            padding:16px 16px 10px;box-shadow:var(--shadow);margin-bottom:16px}
+  .chartbox h2{font-size:13px;font-weight:600;margin:2px 4px 10px;color:var(--muted)}
+  .cv{position:relative;height:240px}
+  canvas{cursor:crosshair}
+
+  /* readout sincronizado — el elemento distintivo pedido por el usuario */
+  #readout{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;
+           background:var(--ink);color:#fff;border-radius:12px;padding:12px 18px;
+           margin:0 0 16px;font-family:var(--mono);font-size:13px;min-height:44px;
+           opacity:.55;transition:opacity .12s}
+  #readout.live{opacity:1}
+  #readout .date{font-weight:600;letter-spacing:.02em}
+  #readout .k{color:#9aa0a6}
+  #readout b{font-weight:600}
+  #readout .exp b{color:#5eead4}
+  #readout .st b{color:#5eead4}
+  #readout .bh b{color:#f0b083}
+
+  .metrics{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+           box-shadow:var(--shadow);overflow:hidden}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{padding:11px 14px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+           font-weight:600}
+  tbody td{font-family:var(--mono)}
+  tbody tr:last-child td{border-bottom:none}
+  .rowname{font-family:var(--sans)!important;color:var(--muted)}
+  .strat{color:var(--accent);font-weight:600}
+  .note{color:var(--muted);font-size:12.5px;line-height:1.55;margin:14px 4px 0}
+  .foot-src{color:var(--muted);font-size:11px;margin-top:30px;text-align:center;font-family:var(--mono)}
+  @media(max-width:640px){.cards{grid-template-columns:1fr}.cv{height:200px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Régimen&nbsp;+&nbsp;Tilt</h1>
+    <span class="sub">Nasdaq-100 · exposición sistemática 0–100%, sin apalancar</span>
+    <span class="asof" id="asof"></span>
+  </header>
+
+  <div class="cards">
+    <div class="card">
+      <div class="lbl">Exposición hoy</div>
+      <div class="val" id="c-exp">–</div>
+      <div class="barwrap"><div class="barfill" id="c-bar"></div></div>
+      <div class="foot" id="c-switch"></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Régimen</div>
+      <div class="val" id="c-reg" style="font-size:26px;margin-top:10px">–</div>
+      <div class="foot">Motor: SMA200 (flat por debajo)</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Score de señal</div>
+      <div class="val" id="c-score">–</div>
+      <div class="foot">Percentil de estructura de volatilidad (0–100)</div>
+    </div>
+  </div>
+
+  <div class="tf" id="tf">
+    <button data-y="1">1A</button>
+    <button data-y="5">5A</button>
+    <button data-y="10">10A</button>
+    <button data-y="0" class="on">Todo</button>
+  </div>
+
+  <div id="readout">
+    <span class="date" id="r-date">Pasa el ratón por un gráfico para leer valores exactos</span>
+    <span class="exp" id="r-exp" hidden><span class="k">exp</span> <b>–</b></span>
+    <span class="st"  id="r-st"  hidden><span class="k">estrategia</span> <b>–</b></span>
+    <span class="bh"  id="r-bh"  hidden><span class="k">nasdaq b&amp;h</span> <b>–</b></span>
+  </div>
+
+  <div class="chartbox">
+    <h2>Exposición al Nasdaq (%)</h2>
+    <div class="cv"><canvas id="chExp"></canvas></div>
+  </div>
+  <div class="chartbox">
+    <h2>Equity acumulada — estrategia vs Nasdaq comprado y mantenido</h2>
+    <div class="cv"><canvas id="chEq"></canvas></div>
+  </div>
+
+  <div class="metrics">
+    <table id="mtab">
+      <thead><tr><th>Métrica</th><th>Full</th><th>In-sample ≤2018</th><th>Out-of-sample ≥2019</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="note" id="note"></p>
+  <p class="foot-src" id="src"></p>
+</div>
+
+<script>
+const fmtPct = v => v==null? "–" : v.toFixed(1)+"%";
+const fmtX   = v => v==null? "–" : "×"+v.toFixed(2);
+
+let DATA, chExp, chEq, hoverIdx=null;
+
+// ---- plugin: línea vertical de crosshair en el índice compartido ----
+const crosshair = {
+  id:"crosshair",
+  afterDatasetsDraw(chart){
+    const i = chart.$idx;
+    if(i==null) return;
+    const meta = chart.getDatasetMeta(0);
+    const pt = meta.data[i];
+    if(!pt) return;
+    const {ctx, chartArea:{top,bottom}} = chart;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pt.x, top); ctx.lineTo(pt.x, bottom);
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(22,24,29,.35)";
+    ctx.setLineDash([4,3]); ctx.stroke();
+    ctx.restore();
+  }
+};
+Chart.register(crosshair);
+
+// sincroniza el índice entre ambos gráficos y pinta el readout
+function syncHover(idx){
+  hoverIdx = idx;
+  [chExp, chEq].forEach(c=>{ c.$idx = idx; c.draw(); });
+  const ro = document.getElementById("readout");
+  if(idx==null){ ro.classList.remove("live"); showReadout(null); return; }
+  ro.classList.add("live");
+  showReadout(idx);
+}
+
+function showReadout(i){
+  const R = id => document.getElementById(id);
+  if(i==null){
+    R("r-date").textContent = "Pasa el ratón por un gráfico para leer valores exactos";
+    ["r-exp","r-st","r-bh"].forEach(id=>R(id).hidden=true);
+    return;
+  }
+  const v = chExp.$view;                     // rango visible actual
+  R("r-date").textContent = v.fechas[i];
+  R("r-exp").hidden=false; R("r-st").hidden=false; R("r-bh").hidden=false;
+  R("r-exp").querySelector("b").textContent = fmtPct(v.exp[i]);
+  R("r-st").querySelector("b").textContent  = fmtX(v.eqS[i]);
+  R("r-bh").querySelector("b").textContent  = fmtX(v.eqB[i]);
+}
+
+// dado un evento de ratón, calcula el índice de dato más cercano
+function idxFromEvent(chart, ev){
+  const el = chart.getElementsAtEventForMode(ev, "index", {intersect:false}, true);
+  if(el.length) return el[0].index;
+  return null;
+}
+
+function attach(chart){
+  const cv = chart.canvas;
+  cv.addEventListener("mousemove", ev=>{
+    const i = idxFromEvent(chart, ev);
+    if(i!==hoverIdx) syncHover(i);
+  });
+  cv.addEventListener("mouseleave", ()=> syncHover(null));
+}
+
+// ---- construcción de gráficos ----
+function baseOpts(){
+  return {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:"index", intersect:false},
+    plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+    scales:{
+      x:{ grid:{display:false},
+          ticks:{maxTicksLimit:7, color:"#9aa0a6", font:{size:11},
+                 callback(v){ return (this.getLabelForValue(v)||"").slice(0,7); }} },
+      y:{ grid:{color:"#eef0ee"}, border:{display:false},
+          ticks:{color:"#9aa0a6", font:{size:11}} }
+    }
+  };
+}
+
+function build(){
+  const oe = baseOpts();
+  oe.scales.y.min = 0; oe.scales.y.max = 105;
+  oe.scales.y.ticks.callback = v=>v+"%";
+  chExp = new Chart(document.getElementById("chExp"), {
+    type:"line",
+    data:{labels:[], datasets:[{
+      data:[], borderColor:"#0d9488", borderWidth:1.6,
+      backgroundColor:"rgba(13,148,136,.10)", fill:true,
+      pointRadius:0, tension:.15, stepped:false }]},
+    options:oe
+  });
+
+  const oq = baseOpts();
+  oq.scales.y.ticks.callback = v=>"×"+v.toFixed(1);
+  chEq = new Chart(document.getElementById("chEq"), {
+    type:"line",
+    data:{labels:[], datasets:[
+      {label:"Estrategia", data:[], borderColor:"#0d9488", borderWidth:1.8,
+       pointRadius:0, tension:.12, fill:false},
+      {label:"Nasdaq B&H", data:[], borderColor:"#c2703d", borderWidth:1.5,
+       pointRadius:0, tension:.12, fill:false, borderDash:[]}
+    ]},
+    options:oq
+  });
+  attach(chExp); attach(chEq);
+}
+
+// filtra por años y repinta ambos gráficos con el mismo eje
+function setRange(years){
+  const n = DATA.fechas.length;
+  let start = 0;
+  if(years>0){
+    const cut = new Date(DATA.fechas[n-1]);
+    cut.setFullYear(cut.getFullYear()-years);
+    const iso = cut.toISOString().slice(0,10);
+    start = DATA.fechas.findIndex(f=>f>=iso);
+    if(start<0) start=0;
+  }
+  const sl = a=>a.slice(start);
+  const fechas = sl(DATA.fechas);
+  let eqS = sl(DATA.equity_estrategia), eqB = sl(DATA.equity_nasdaq_bh);
+  // renormaliza la equity al inicio del rango visible (base ×1)
+  const b0 = eqS[0], c0 = eqB[0];
+  eqS = eqS.map(x=> x==null?null:x/b0);
+  eqB = eqB.map(x=> x==null?null:x/c0);
+  const exp = sl(DATA.exposicion_pct);
+
+  const view = {fechas, exp, eqS, eqB};
+  chExp.$view = view; chEq.$view = view;
+
+  chExp.data.labels = fechas; chExp.data.datasets[0].data = exp;
+  chEq.data.labels  = fechas; chEq.data.datasets[0].data = eqS;
+  chEq.data.datasets[1].data = eqB;
+  chExp.$idx=null; chEq.$idx=null;
+  chExp.update(); chEq.update();
+  syncHover(null);
+}
+
+function fillCards(){
+  const R = id=>document.getElementById(id);
+  R("c-exp").textContent = DATA.exposicion_hoy_pct + "%";
+  R("c-bar").style.width = DATA.exposicion_hoy_pct + "%";
+  R("c-switch").innerHTML = "Switch monetario: <b>"+DATA.switch_monetario+"</b>";
+  const alc = DATA.regimen_hoy.startsWith("ALC");
+  R("c-reg").innerHTML = '<span class="pill '+(alc?"alc":"baj")+'">'+DATA.regimen_hoy+"</span>";
+  R("c-score").textContent = DATA.score_hoy==null? "–" : DATA.score_hoy.toFixed(0);
+  R("asof").textContent = "datos: " + DATA.desde + " → " + DATA.hasta;
+  R("src").textContent = "Generado " + DATA.generado + " · fuentes: yfinance + FRED (público)";
+  R("note").textContent = DATA.nota;
+}
+
+function fillMetrics(){
+  const m = DATA.metricas, tb = document.querySelector("#mtab tbody");
+  const rows = [
+    ["CAGR", g=>fmtPct(g.cagr)],
+    ["Máx. drawdown", g=>fmtPct(g.maxdd)],
+    ["Sharpe", g=> g.sharpe==null?"–":g.sharpe.toFixed(2)],
+  ];
+  const block = (name, obj, cls)=>{
+    let h = `<tr><td class="rowname" style="font-weight:600;color:${cls||'var(--muted)'}">${name}</td><td></td><td></td><td></td></tr>`;
+    rows.forEach(([lbl,fn])=>{
+      h += `<tr><td class="rowname">${lbl}</td>`+
+           `<td>${fn(obj.full)}</td><td>${fn(obj.is)}</td><td>${fn(obj.oos)}</td></tr>`;
+    });
+    return h;
+  };
+  tb.innerHTML = block("Estrategia", m.estrategia, "var(--accent)")
+               + block("Nasdaq Buy&Hold", m.buyhold);
+}
+
+fetch("./sistema_regimen_tilt.json?_="+Date.now())
+  .then(r=>r.json())
+  .then(d=>{
+    DATA = d;
+    build(); fillCards(); fillMetrics();
+    setRange(0);
+    document.querySelectorAll("#tf button").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        document.querySelectorAll("#tf button").forEach(x=>x.classList.remove("on"));
+        b.classList.add("on");
+        setRange(+b.dataset.y);
+      });
+    });
+  })
+  .catch(e=>{
+    document.querySelector(".wrap").insertAdjacentHTML("beforeend",
+      '<p class="note" style="color:#c0392b">No se pudo cargar sistema_regimen_tilt.json. '+
+      'Ejecuta <code>python construir_sistema.py</code> y sírvelo desde el mismo directorio.</p>');
+    console.error(e);
+  });
+</script>
+</body>
+</html>

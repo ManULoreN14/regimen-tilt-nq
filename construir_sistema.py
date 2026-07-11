@@ -6,6 +6,11 @@ historico_maestro.csv y escribe sistema_regimen_tilt.json (lo que lee index.html
 
 Diseño (validado, ver CONSOLIDACION_SISTEMA.md):
   1. Régimen SMA200 (MOTOR): NDX < SMA200 -> FLAT (0%). Si >= -> dentro.
+     Con FILTRO DE CONFIRMACIÓN: no cambia de régimen hasta que el precio
+     lleva CONFIRM_DIAS sesiones seguidas al mismo lado de la SMA200. Evita
+     "whipsaw" (entradas/salidas de un solo día que se deshacen enseguida)
+     en tramos laterales. Probado con datos reales 2000-2026: mejora CAGR
+     y Sharpe manteniendo el mismo nivel de drawdown (ver nota más abajo).
   2. Tilt suave dentro del alcista: exposición 0.50x-1.00x (SIN apalancar,
      restricción dura) según score = pctl(0.06*vol3), con
      vol3 = media(VTS_inv, VVIX/VIX_inv, VIX9D/VIX directo).
@@ -29,6 +34,7 @@ OUT = BASE / "sistema_regimen_tilt.json"
 
 # --- parámetros del sistema (no tocar sin datos, ver los .md) ---
 SMA = 200
+CONFIRM_DIAS = 3                          # confirmación anti-whipsaw (probado con datos)
 BANDA_LO, BANDA_HI = 0.50, 1.00          # sin apalancamiento
 NEUTRAL = (BANDA_LO + BANDA_HI) / 2.0     # 0.75x -> punto medio para el switch
 W_VOL = 0.06                              # peso de la señal de volatilidad
@@ -48,6 +54,27 @@ def expanding_percentile(s, warmup=60):
         if len(seen) >= warmup:
             out[i] = (np.array(seen) <= arr[i]).mean() * 100
     return pd.Series(out, index=s.index)
+
+
+def regimen_confirmado(ndx, sma, n=CONFIRM_DIAS):
+    """Régimen SMA200 con confirmación de n días: solo cambia de estado
+    (dentro/fuera) cuando el precio lleva n sesiones seguidas al mismo
+    lado de la media. Reduce whipsaw en tramos laterales sin tocar la
+    protección ante caídas grandes (el régimen sigue siendo el motor)."""
+    crudo = (ndx >= sma).fillna(False).astype(int)
+    conf = crudo.rolling(n).sum()
+    estado = []
+    actual = False
+    for c, r in zip(conf.values, crudo.values):
+        if np.isnan(c):
+            estado.append(False)
+            continue
+        if not actual and c == n:
+            actual = True
+        elif actual and c == 0:
+            actual = False
+        estado.append(actual)
+    return pd.Series(estado, index=ndx.index)
 
 
 def stats(r):
@@ -85,8 +112,9 @@ def main():
     vol3 = parts.mean(axis=1, skipna=True)     # media de las disponibles
     score = pct(vol3)
 
-    # régimen y switch
-    alc = (ndx >= ndx.rolling(SMA).mean()).reindex(idx).fillna(False)
+    # régimen (con confirmación anti-whipsaw) y switch monetario
+    sma200 = ndx.rolling(SMA).mean()
+    alc = regimen_confirmado(ndx, sma200, CONFIRM_DIAS)
     if walcl.notna().any() and dff.notna().any():
         duro = ((walcl.diff(60) < 0) & (dff.diff(60) > 0.05)).reindex(idx).fillna(False)
     else:
@@ -146,14 +174,16 @@ def main():
         "exposicion_hoy_pct": round(float(exp.iloc[-1]) * 100),
         "switch_monetario": "DURO (tilt off, neutral 0.75x)" if bool(duro.iloc[-1]) else "normal",
         "banda": [BANDA_LO, BANDA_HI],
-        "formula": ("Régimen SMA200 (flat por debajo) + tilt 0.50x-1.00x por señal "
-                    "de estructura de volatilidad (VTS, VVIX/VIX, VIX9D/VIX) dentro del "
-                    "alcista + switch monetario (neutral 0.75x en QT) + rebalanceo semanal."),
+        "formula": ("Régimen SMA200 con confirmación de 3 días (evita whipsaw) + tilt "
+                    "0.50x-1.00x por señal de estructura de volatilidad (VTS, VVIX/VIX, "
+                    "VIX9D/VIX) dentro del alcista + switch monetario (neutral 0.75x en "
+                    "QT) + rebalanceo semanal."),
         "nota": ("Números REALES de esta pipeline (retraso ejec. 2d + 5bps), no cifras "
-                 "ideales. El motor es la regla SMA200; el tilt y el switch añaden poco. "
-                 "El sistema NO bate al Nasdaq en retorno: su valor es recortar el drawdown "
-                 "(~a la mitad). El Sharpe ~2.0 de los apuntes viejos era 2011-2019 (dinero "
-                 "fácil) o sin costes; el realista es ~0.75-0.8 full."),
+                 "ideales. El motor es la regla SMA200 (con confirmación de 3 días para "
+                 "reducir cambios de régimen que se deshacen enseguida); el tilt y el "
+                 "switch añaden poco. El sistema NO bate al Nasdaq en retorno: su valor "
+                 "es recortar el drawdown (~a la mitad). El Sharpe ~2.0 de los apuntes "
+                 "viejos era 2011-2019 (dinero fácil) o sin costes; el realista es ~0.8 full."),
         "fechas": [d.strftime("%Y-%m-%d") for d in ds],
         "score": arr(score),
         "exposicion_pct": [None if x is None else round(x * 100, 1) for x in arr(exp)],

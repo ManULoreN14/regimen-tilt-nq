@@ -12,7 +12,7 @@
     "hit_rate_mensual_pct": 61.1,
     "mejor_año_pct": 44.24,
     "peor_año_pct": -24.21,
-    "equity_final": 15.4549
+    "equity_final": 15.455
   },
   "qqq_bh": {
     "sistema": "QQQ_BH",
@@ -115,5 +115,5 @@
   "criterio_incorporacion": "|IC| > 0.03 AND p < 0.05 AND Stability >= 70% AND WF >= 3/4",
   "arquitectura": "Dual: Direction Score (tendencia) + Volatility Brake (riesgo)",
   "db_tabla": "backtest_extendido_2003_2026",
-  "generado": "2026-07-11T10:00:43.775405"
+  "generado": "2026-07-12T15:24:29.259188"
 }

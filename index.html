@@ -4,12 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Régimen + Tilt · Nasdaq-100</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#f7f7f4; --panel:#ffffff; --ink:#16181d; --muted:#6b7280;
     --line:#e6e6e0; --accent:#0d9488; --accent-soft:rgba(13,148,136,.12);
-    --bh:#c2703d; --flat:#9aa0a6; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
+    --bh:#c2703d; --nra:#5b6cd6; --flat:#9aa0a6; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
     --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
@@ -43,6 +49,8 @@
              transition:.12s}
   .tf button:hover{color:var(--ink)}
   .tf button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tf button.cmp-btn{border-color:#5b6cd6;color:#5b6cd6}
+  .tf button.cmp-btn.on{background:#5b6cd6;color:#fff;border-color:#5b6cd6}
 
   .chartbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
             padding:16px 16px 10px;box-shadow:var(--shadow);margin-bottom:16px}
@@ -62,6 +70,7 @@
   #readout .exp b{color:#5eead4}
   #readout .st b{color:#5eead4}
   #readout .bh b{color:#f0b083}
+  #readout .nra b{color:#a5aeee}
 
   .metrics{background:var(--panel);border:1px solid var(--line);border-radius:14px;
            box-shadow:var(--shadow);overflow:hidden}
@@ -111,6 +120,9 @@
     <button data-y="5">5A</button>
     <button data-y="10">10A</button>
     <button data-y="0" class="on">Todo</button>
+    <button id="cmp-toggle" class="cmp-btn" style="display:none;margin-left:auto">
+      Comparar con NRA-DAS
+    </button>
   </div>
 
   <div id="readout">
@@ -118,6 +130,7 @@
     <span class="exp" id="r-exp" hidden><span class="k">exp</span> <b>–</b></span>
     <span class="st"  id="r-st"  hidden><span class="k">estrategia</span> <b>–</b></span>
     <span class="bh"  id="r-bh"  hidden><span class="k">nasdaq b&amp;h</span> <b>–</b></span>
+    <span class="nra" id="r-nra" hidden><span class="k">nra-das</span> <b>–</b></span>
   </div>
 
   <div class="chartbox">
@@ -136,6 +149,21 @@
     </table>
   </div>
   <p class="note" id="note"></p>
+
+  <div class="metrics" id="cmp-section" style="display:none;margin-top:22px">
+    <div style="padding:16px 20px 4px">
+      <h2 style="font-size:13px;font-weight:600;margin:0 0 2px;color:var(--muted)">
+        Comparativa vs NRA-DAS <span style="color:#5b6cd6">·</span>
+      </h2>
+      <p class="note" style="margin:2px 0 0" id="cmp-sub"></p>
+    </div>
+    <table id="cmp-tab">
+      <thead><tr><th>Mismo periodo</th><th>CAGR</th><th>MaxDD</th><th>Sharpe</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="note" id="cmp-extra" style="padding:0 20px 16px"></p>
+  </div>
+
   <p class="foot-src" id="src"></p>
 </div>
 
@@ -143,7 +171,7 @@
 const fmtPct = v => v==null? "–" : v.toFixed(1)+"%";
 const fmtX   = v => v==null? "–" : "×"+v.toFixed(2);
 
-let DATA, chExp, chEq, hoverIdx=null;
+let DATA, NRA, chExp, chEq, hoverIdx=null;
 
 // ---- plugin: línea vertical de crosshair en el índice compartido ----
 const crosshair = {
@@ -179,7 +207,7 @@ function showReadout(i){
   const R = id => document.getElementById(id);
   if(i==null){
     R("r-date").textContent = "Pasa el ratón por un gráfico para leer valores exactos";
-    ["r-exp","r-st","r-bh"].forEach(id=>R(id).hidden=true);
+    ["r-exp","r-st","r-bh","r-nra"].forEach(id=>{ const e=R(id); if(e) e.hidden=true; });
     return;
   }
   const v = chExp.$view;                     // rango visible actual
@@ -188,6 +216,15 @@ function showReadout(i){
   R("r-exp").querySelector("b").textContent = fmtPct(v.exp[i]);
   R("r-st").querySelector("b").textContent  = fmtX(v.eqS[i]);
   R("r-bh").querySelector("b").textContent  = fmtX(v.eqB[i]);
+  const rnra = R("r-nra");
+  if(rnra){
+    if(v.eqNra && v.eqNra[i]!=null){
+      rnra.hidden=false;
+      rnra.querySelector("b").textContent = fmtX(v.eqNra[i]);
+    } else {
+      rnra.hidden = true;
+    }
+  }
 }
 
 // dado un evento de ratón, calcula el índice de dato más cercano
@@ -228,10 +265,14 @@ function build(){
   oe.scales.y.ticks.callback = v=>v+"%";
   chExp = new Chart(document.getElementById("chExp"), {
     type:"line",
-    data:{labels:[], datasets:[{
-      data:[], borderColor:"#0d9488", borderWidth:1.6,
-      backgroundColor:"rgba(13,148,136,.10)", fill:true,
-      pointRadius:0, tension:.15, stepped:false }]},
+    data:{labels:[], datasets:[
+      { label:"Estrategia", data:[], borderColor:"#0d9488", borderWidth:1.6,
+        backgroundColor:"rgba(13,148,136,.10)", fill:true,
+        pointRadius:0, tension:.15, stepped:false },
+      { label:"NRA-DAS", data:[], borderColor:"#5b6cd6", borderWidth:1.4,
+        backgroundColor:"transparent", fill:false,
+        pointRadius:0, tension:.15, hidden:true }
+    ]},
     options:oe
   });
 
@@ -243,7 +284,9 @@ function build(){
       {label:"Estrategia", data:[], borderColor:"#0d9488", borderWidth:1.8,
        pointRadius:0, tension:.12, fill:false},
       {label:"Nasdaq B&H", data:[], borderColor:"#c2703d", borderWidth:1.5,
-       pointRadius:0, tension:.12, fill:false, borderDash:[]}
+       pointRadius:0, tension:.12, fill:false, borderDash:[]},
+      {label:"NRA-DAS", data:[], borderColor:"#5b6cd6", borderWidth:1.5,
+       pointRadius:0, tension:.12, fill:false, hidden:true}
     ]},
     options:oq
   });
@@ -264,18 +307,26 @@ function setRange(years){
   const sl = a=>a.slice(start);
   const fechas = sl(DATA.fechas);
   let eqS = sl(DATA.equity_estrategia), eqB = sl(DATA.equity_nasdaq_bh);
+  let eqNra = NRA ? sl(NRA.equity_nra) : null;
   // renormaliza la equity al inicio del rango visible (base ×1)
   const b0 = eqS[0], c0 = eqB[0];
   eqS = eqS.map(x=> x==null?null:x/b0);
   eqB = eqB.map(x=> x==null?null:x/c0);
+  if(eqNra){
+    const n0 = eqNra.find(x=>x!=null);
+    eqNra = eqNra.map(x=> (x==null||n0==null)?null:x/n0);
+  }
   const exp = sl(DATA.exposicion_pct);
+  const expNra = NRA ? sl(NRA.exposicion_pct_nra) : null;
 
-  const view = {fechas, exp, eqS, eqB};
+  const view = {fechas, exp, eqS, eqB, eqNra, expNra};
   chExp.$view = view; chEq.$view = view;
 
   chExp.data.labels = fechas; chExp.data.datasets[0].data = exp;
+  if(NRA){ chExp.data.datasets[1].data = expNra; }
   chEq.data.labels  = fechas; chEq.data.datasets[0].data = eqS;
   chEq.data.datasets[1].data = eqB;
+  if(NRA){ chEq.data.datasets[2].data = eqNra; }
   chExp.$idx=null; chEq.$idx=null;
   chExp.update(); chEq.update();
   syncHover(null);
@@ -313,19 +364,70 @@ function fillMetrics(){
                + block("Nasdaq Buy&Hold", m.buyhold);
 }
 
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("service-worker.js"));
+}
+
+function fillComparativa(){
+  const R = id=>document.getElementById(id);
+  R("cmp-toggle").style.display = "inline-block";
+  R("cmp-sub").textContent =
+    `Periodo NRA-DAS oficial: ${NRA.nra_das_periodo_oficial||"–"}  ·  `+
+    `Correlación de retornos (5d, mismo periodo): ${NRA.correlacion_retornos_5d ?? "–"}  ·  `+
+    `Turnover anual: nuestro ${NRA.turnover_nuestro_anual_pct}%  vs  NRA-DAS ${NRA.turnover_oficial_nra_anual_pct}%`;
+
+  const mp = NRA.mismo_periodo;
+  const rows = [
+    ["Nuestro sistema (Régimen+Tilt)", mp.nuestro_sistema, "var(--accent)"],
+    ["NRA-DAS", mp.nra_das, "#5b6cd6"],
+    ["Nasdaq/QQQ B&H", mp.nra_qqq_bh, "var(--bh)"],
+  ];
+  const tb = document.querySelector("#cmp-tab tbody");
+  tb.innerHTML = rows.map(([name,g,color])=>
+    `<tr><td class="rowname" style="font-weight:600;color:${color}">${name}</td>`+
+    `<td>${fmtPct(g.cagr)}</td><td>${fmtPct(g.maxdd)}</td><td>${g.sharpe==null?"–":g.sharpe.toFixed(2)}</td></tr>`
+  ).join("") + `<tr><td class="rowname" style="font-size:11px">ventana: ${mp.ventana}</td><td colspan="3"></td></tr>`;
+
+  R("cmp-extra").textContent =
+    "Métricas 'mismo periodo' recalculadas sobre la ventana común a ambos sistemas "+
+    "(desde que arranca el score de volatilidad del nuestro), para comparar en igualdad "+
+    "de condiciones. Las métricas oficiales de cada proyecto (periodo completo) pueden "+
+    "diferir por cubrir rangos de fechas distintos.";
+
+  R("cmp-toggle").addEventListener("click", ()=>{
+    const on = chExp.data.datasets[1].hidden === false;
+    chExp.data.datasets[1].hidden = on;
+    chEq.data.datasets[2].hidden = on;
+    R("cmp-section").style.display = on ? "none" : "block";
+    R("cmp-toggle").classList.toggle("on", !on);
+    chExp.update(); chEq.update();
+  });
+}
+
 fetch("./sistema_regimen_tilt.json?_="+Date.now())
   .then(r=>r.json())
   .then(d=>{
     DATA = d;
     build(); fillCards(); fillMetrics();
     setRange(0);
-    document.querySelectorAll("#tf button").forEach(b=>{
+    document.querySelectorAll("#tf button[data-y]").forEach(b=>{
       b.addEventListener("click", ()=>{
-        document.querySelectorAll("#tf button").forEach(x=>x.classList.remove("on"));
+        document.querySelectorAll("#tf button[data-y]").forEach(x=>x.classList.remove("on"));
         b.classList.add("on");
         setRange(+b.dataset.y);
       });
     });
+    // comparación con NRA-DAS: opcional, si el fichero no existe simplemente no aparece
+    return fetch("./nra_das_comparativa.json?_="+Date.now())
+      .then(r=> r.ok ? r.json() : null)
+      .then(nra=>{
+        if(!nra) return;
+        NRA = nra;
+        const activo = document.querySelector('#tf button[data-y].on');
+        setRange(activo ? +activo.dataset.y : 0);
+        fillComparativa();
+      })
+      .catch(()=>{ /* sin comparativa, todo normal */ });
   })
   .catch(e=>{
     document.querySelector(".wrap").insertAdjacentHTML("beforeend",

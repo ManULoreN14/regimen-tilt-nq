@@ -88,6 +88,34 @@ No hace falta ninguna configuración extra para esto: en cuanto
 `index.html`, `manifest.json`, `service-worker.js` y la carpeta
 `icons/` estén en GitHub Pages, la instalación funciona sola.
 
+## Comparativa con otro sistema (NRA-DAS)
+
+La web puede mostrar, de forma opcional, una línea de comparación con
+otro proyecto tuyo ("NRA-DAS") en los dos gráficos, más una tabla de
+métricas en igualdad de condiciones (mismo periodo para ambos).
+
+**Cómo actualizarla cuando generes nuevos resultados de NRA-DAS** (según
+dijiste, algo esporádico — semanal o mensual):
+
+1. Sustituye estos 3 ficheros dentro de la carpeta `nra_das/` del repo,
+   **manteniendo exactamente estos nombres**:
+   - `nra_das/output_backtest_nradas.csv` (equity diaria)
+   - `nra_das/output_backtest_nradas_por_año.csv` (retornos anuales)
+   - `nra_das/output_backtest_nradas.json` (métricas oficiales)
+2. Ejecuta:
+   ```bash
+   python comparar_nra_das.py
+   ```
+3. Sube el cambio (`git add . && git commit -m "..." && git push`).
+
+Eso regenera `nra_das_comparativa.json`, que es lo único que lee
+`index.html` para pintar la línea y la tabla — **no hace falta tocar
+nada más**. Si algún día quitas los ficheros de `nra_das/` o no ejecutas
+el script, la web simplemente no muestra la comparación (no rompe nada).
+
+El botón "Comparar con NRA-DAS" solo aparece si `nra_das_comparativa.json`
+existe y cargó bien.
+
 ## Notas de datos
 
 - **VIX3M / VIX9D / VVIX son poco fiables vía yfinance** (a veces

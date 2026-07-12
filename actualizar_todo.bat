@@ -115,6 +115,11 @@ if errorlevel 1 (
     echo ERROR: fallo generar_ensemble.py
     goto :error
 )
+python comparar_crecimiento.py
+if errorlevel 1 (
+    echo ERROR: fallo comparar_crecimiento.py
+    goto :error
+)
 
 echo.
 echo ================================================================

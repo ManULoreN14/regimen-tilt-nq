@@ -88,33 +88,50 @@ No hace falta ninguna configuración extra para esto: en cuanto
 `index.html`, `manifest.json`, `service-worker.js` y la carpeta
 `icons/` estén en GitHub Pages, la instalación funciona sola.
 
-## Comparativa con otro sistema (NRA-DAS)
+## Comparativa con otros sistemas (NRA-DAS, Quant Engine, ...)
 
-La web puede mostrar, de forma opcional, una línea de comparación con
-otro proyecto tuyo ("NRA-DAS") en los dos gráficos, más una tabla de
-métricas en igualdad de condiciones (mismo periodo para ambos).
+La web puede mostrar, de forma opcional, una línea de comparación por
+cada proyecto externo que tengas, en los dos gráficos, más una tabla de
+métricas en igualdad de condiciones (mismo periodo para todos).
 
-**Cómo actualizarla cuando generes nuevos resultados de NRA-DAS** (según
-dijiste, algo esporádico — semanal o mensual):
+Actualmente hay dos comparaciones activas: **NRA-DAS** (rojo) y
+**Quant Engine** (azul). Añadir un sistema nuevo es sencillo porque la
+lógica está generalizada en `comparativa_lib.py`.
 
-1. Sustituye estos 3 ficheros dentro de la carpeta `nra_das/` del repo,
-   **manteniendo exactamente estos nombres**:
-   - `nra_das/output_backtest_nradas.csv` (equity diaria)
-   - `nra_das/output_backtest_nradas_por_año.csv` (retornos anuales)
-   - `nra_das/output_backtest_nradas.json` (métricas oficiales)
-2. Ejecuta:
+**Cómo actualizar una comparación existente** (según dijiste, algo
+esporádico — semanal o mensual):
+
+1. Sustituye los 3 ficheros dentro de la carpeta del sistema
+   correspondiente (`nra_das/` o `quant_engine/`), **manteniendo
+   exactamente los nombres originales**.
+2. Ejecuta el script de ese sistema:
    ```bash
    python comparar_nra_das.py
+   # o
+   python comparar_quant_engine.py
    ```
 3. Sube el cambio (`git add . && git commit -m "..." && git push`).
 
-Eso regenera `nra_das_comparativa.json`, que es lo único que lee
-`index.html` para pintar la línea y la tabla — **no hace falta tocar
-nada más**. Si algún día quitas los ficheros de `nra_das/` o no ejecutas
-el script, la web simplemente no muestra la comparación (no rompe nada).
+**Cómo añadir un sistema nuevo** (si en el futuro tienes un tercero):
 
-El botón "Comparar con NRA-DAS" solo aparece si `nra_das_comparativa.json`
-existe y cargó bien.
+1. Crea una carpeta `nombre_sistema/` con tus 3 ficheros (CSV diario con
+   columnas `equity_sys`, `equity_qqq`, `qqq_weight` + columna de fecha;
+   CSV anual opcional; JSON de métricas oficiales).
+2. Crea un script `comparar_nombre_sistema.py` copiando
+   `comparar_quant_engine.py` como plantilla y ajustando los nombres de
+   fichero y la columna de fecha (`"fecha"` o `"date"`, según tu CSV).
+3. Añade una línea en `index.html`, dentro de `COMPARACIONES_CFG` (busca
+   ese nombre en el fichero), con el nuevo `archivo` y un `color` que se
+   distinga bien de los demás.
+4. Ejecuta tu script nuevo y haz push. La web se actualiza sola con la
+   tercera línea, leyenda y tabla incluidas.
+
+Si borras la carpeta de un sistema o no ejecutas su script, esa
+comparación simplemente desaparece de la web — no rompe nada del sistema
+principal ni de las demás comparaciones.
+
+Haz clic en cualquier nombre de la leyenda (debajo de cada gráfico) para
+mostrar u ocultar esa línea.
 
 ## Notas de datos
 

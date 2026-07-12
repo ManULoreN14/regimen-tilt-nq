@@ -1,0 +1,107 @@
+{
+  "quant_engine": {
+    "sistema": "quant_engine",
+    "periodo": "2005-01-04 / 2026-07-02",
+    "n_dias": 5401,
+    "cagr_pct": 9.91,
+    "vol_anual_pct": 9.81,
+    "sharpe": 1.013,
+    "sortino": 1.315,
+    "calmar": 0.456,
+    "max_dd_pct": -21.73,
+    "hit_rate_mensual_pct": 64.0,
+    "mejor_ano_pct": 37.17,
+    "peor_ano_pct": -20.14,
+    "equity_final": 7.5713
+  },
+  "qqq_bh": {
+    "sistema": "QQQ_BH",
+    "periodo": "2005-01-04 / 2026-07-02",
+    "n_dias": 5401,
+    "cagr_pct": 15.2,
+    "vol_anual_pct": 21.62,
+    "sharpe": 0.763,
+    "sortino": 0.992,
+    "calmar": 0.285,
+    "max_dd_pct": -53.4,
+    "hit_rate_mensual_pct": 61.6,
+    "mejor_ano_pct": 55.07,
+    "peor_ano_pct": -41.73,
+    "equity_final": 20.7656
+  },
+  "turnover": {
+    "turnover_anual_pct": 679.3,
+    "dias_con_cambio_peso_1pct": 546
+  },
+  "crisis": {
+    "2008 (ene-dic) [quant_engine]": -6.65,
+    "2008 (ene-dic) [QQQ_BH]": -40.79,
+    "2020 Covid (feb-mar) [quant_engine]": -6.11,
+    "2020 Covid (feb-mar) [QQQ_BH]": -14.2,
+    "2022 bajista (ene-dic) [quant_engine]": -20.0,
+    "2022 bajista (ene-dic) [QQQ_BH]": -33.22,
+    "2025 aranceles (abr) [quant_engine]": 0.38,
+    "2025 aranceles (abr) [QQQ_BH]": 0.59
+  },
+  "factores_en_produccion": {
+    "net_liquidity_chg_20d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "hyg_mom_20d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "vix_ts_signal": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "vix_risk_premium_20d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "yield_curve_signal": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "qqq_tlt_corr_signal_20d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "dxy_momentum_signal_20d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "dxy_mom_60d_inv": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "irx_chg_20d_inv": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "soxx_rel_mom_60d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "cu_au_mom_60d": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "cot_nq_signal": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "pct_above_ema50": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "pct_above_ema200": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "breadth_composite": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "dix_signal": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    },
+    "spxw_pcr_signal": {
+      "nota": "ver inventario_sistema.md para IC/HR/Stability individual"
+    }
+  },
+  "arquitectura": "Composite score (17 factores, equal-weight, EMA span=5) + histeresis con umbrales dinamicos recalibrados por percentiles (cada 6 meses, sin look-ahead) -> 6 regimenes -> asignacion Nasdaq/Monetario/RF",
+  "umbrales_dinamicos": true,
+  "walk_forward_config": {
+    "train_years": 5,
+    "oos_years": 1,
+    "step_months": 6
+  },
+  "generado": "2026-07-12T13:43:32.668973"
+}

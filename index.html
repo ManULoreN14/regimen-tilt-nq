@@ -74,7 +74,7 @@
   #readout .exp b{color:#5eead4}
   #readout .st b{color:#5eead4}
   #readout .bh b{color:#f0b083}
-  #readout .nra b{color:#f5a3a3}
+  #readout .cmp b{filter:brightness(1.3)}
 
   .metrics{background:var(--panel);border:1px solid var(--line);border-radius:14px;
            box-shadow:var(--shadow);overflow:hidden}
@@ -131,7 +131,7 @@
     <span class="exp" id="r-exp" hidden><span class="k">exp</span> <b>–</b></span>
     <span class="st"  id="r-st"  hidden><span class="k">estrategia</span> <b>–</b></span>
     <span class="bh"  id="r-bh"  hidden><span class="k">nasdaq b&amp;h</span> <b>–</b></span>
-    <span class="nra" id="r-nra" hidden><span class="k">nra-das</span> <b>–</b></span>
+    <span id="r-comps"></span>
   </div>
 
   <div class="chartbox">
@@ -156,7 +156,7 @@
   <div class="metrics" id="cmp-section" style="display:none;margin-top:22px">
     <div style="padding:16px 20px 4px">
       <h2 style="font-size:13px;font-weight:600;margin:0 0 2px;color:var(--muted)">
-        Comparativa vs NRA-DAS <span style="color:#dc2626">·</span>
+        Comparativa con otros sistemas
       </h2>
       <p class="note" style="margin:2px 0 0" id="cmp-sub"></p>
     </div>
@@ -174,7 +174,13 @@
 const fmtPct = v => v==null? "–" : v.toFixed(1)+"%";
 const fmtX   = v => v==null? "–" : "×"+v.toFixed(2);
 
-let DATA, NRA, chExp, chEq, hoverIdx=null;
+// config de sistemas externos a comparar: añadir uno nuevo es una línea aquí
+const COMPARACIONES_CFG = [
+  {archivo:"nra_das_comparativa.json", color:"#dc2626"},
+  {archivo:"quant_engine_comparativa.json", color:"#2563eb"},
+];
+
+let DATA, COMPS=[], chExp, chEq, hoverIdx=null;
 
 // ---- plugin: línea vertical de crosshair en el índice compartido ----
 const crosshair = {
@@ -212,9 +218,11 @@ function syncHover(idx){
 
 function showReadout(i){
   const R = id => document.getElementById(id);
+  const compsBox = R("r-comps");
   if(i==null){
     R("r-date").textContent = "Pasa el ratón por un gráfico para leer valores exactos";
-    ["r-exp","r-st","r-bh","r-nra"].forEach(id=>{ const e=R(id); if(e) e.hidden=true; });
+    ["r-exp","r-st","r-bh"].forEach(id=>{ const e=R(id); if(e) e.hidden=true; });
+    compsBox.innerHTML = "";
     return;
   }
   const v = chExp.$view;                     // rango visible actual
@@ -223,16 +231,14 @@ function showReadout(i){
   R("r-exp").querySelector("b").textContent = fmtPct(v.exp[i]);
   R("r-st").querySelector("b").textContent  = fmtX(v.eqS[i]);
   R("r-bh").querySelector("b").textContent  = fmtX(v.eqB[i]);
-  const rnra = R("r-nra");
-  if(rnra){
-    if(v.eqNra && v.eqNra[i]!=null){
-      rnra.hidden=false;
-      const expTxt = (v.expNra && v.expNra[i]!=null) ? ` (exp ${fmtPct(v.expNra[i])})` : "";
-      rnra.querySelector("b").textContent = fmtX(v.eqNra[i]) + expTxt;
-    } else {
-      rnra.hidden = true;
-    }
-  }
+
+  compsBox.innerHTML = COMPS.map(c=>{
+    const eq = v.comps[c.nombre]?.eq, exp = v.comps[c.nombre]?.exp;
+    if(!eq || eq[i]==null) return "";
+    const expTxt = (exp && exp[i]!=null) ? ` (exp ${fmtPct(exp[i])})` : "";
+    return `<span class="cmp"><span class="k">${c.nombre.toLowerCase()}</span> `+
+           `<b style="color:${c.color}">${fmtX(eq[i])}${expTxt}</b></span>`;
+  }).join("");
 }
 
 // leyenda HTML clicable, sincronizada con el estado real de cada dataset
@@ -332,28 +338,32 @@ function setRange(years){
   const sl = a=>a.slice(start);
   const fechas = sl(DATA.fechas);
   let eqS = sl(DATA.equity_estrategia), eqB = sl(DATA.equity_nasdaq_bh);
-  let eqNra = NRA ? sl(NRA.equity_nra) : null;
-  // renormaliza la equity al inicio del rango visible (base ×1)
   const b0 = eqS[0], c0 = eqB[0];
   eqS = eqS.map(x=> x==null?null:x/b0);
   eqB = eqB.map(x=> x==null?null:x/c0);
-  if(eqNra){
-    const n0 = eqNra.find(x=>x!=null);
-    eqNra = eqNra.map(x=> (x==null||n0==null)?null:x/n0);
-  }
   const exp = sl(DATA.exposicion_pct);
-  const expNra = NRA ? sl(NRA.exposicion_pct_nra) : null;
 
-  const view = {fechas, exp, eqS, eqB, eqNra, expNra};
+  const comps = {};
+  COMPS.forEach(c=>{
+    let eq = sl(c.data.equity);
+    const n0 = eq.find(x=>x!=null);
+    eq = eq.map(x=> (x==null||n0==null)?null:x/n0);
+    const exp2 = sl(c.data.exposicion_pct);
+    comps[c.nombre] = {eq, exp:exp2};
+  });
+
+  const view = {fechas, exp, eqS, eqB, comps};
   chExp.$view = view; chEq.$view = view;
 
   chExp.data.labels = fechas; chExp.data.datasets[0].data = exp;
   chEq.data.labels  = fechas; chEq.data.datasets[0].data = eqS;
   chEq.data.datasets[1].data = eqB;
-  const idxExpNra = chExp.data.datasets.findIndex(d=>d.label==="NRA-DAS");
-  if(idxExpNra>=0) chExp.data.datasets[idxExpNra].data = expNra;
-  const idxEqNra = chEq.data.datasets.findIndex(d=>d.label==="NRA-DAS");
-  if(idxEqNra>=0) chEq.data.datasets[idxEqNra].data = eqNra;
+  COMPS.forEach(c=>{
+    const idxExp = chExp.data.datasets.findIndex(d=>d.label===c.nombre);
+    if(idxExp>=0) chExp.data.datasets[idxExp].data = comps[c.nombre].exp;
+    const idxEq = chEq.data.datasets.findIndex(d=>d.label===c.nombre);
+    if(idxEq>=0) chEq.data.datasets[idxEq].data = comps[c.nombre].eq;
+  });
   chExp.$idx=null; chEq.$idx=null;
   chExp.update(); chEq.update();
   syncHover(null);
@@ -398,40 +408,40 @@ if("serviceWorker" in navigator){
 function fillComparativa(){
   const R = id=>document.getElementById(id);
 
-  // añade las series de NRA-DAS a ambos gráficos (si no estaban ya)
-  if(!chExp.data.datasets.some(d=>d.label==="NRA-DAS")){
-    chExp.data.datasets.push({
-      label:"NRA-DAS", data:[], borderColor:"#dc2626", borderWidth:1.4,
-      backgroundColor:"transparent", fill:false, pointRadius:0, tension:.15
-    });
-  }
-  if(!chEq.data.datasets.some(d=>d.label==="NRA-DAS")){
-    chEq.data.datasets.push({
-      label:"NRA-DAS", data:[], borderColor:"#dc2626", borderWidth:1.5,
-      pointRadius:0, tension:.12, fill:false
-    });
-  }
+  COMPS.forEach(c=>{
+    if(!chExp.data.datasets.some(d=>d.label===c.nombre)){
+      chExp.data.datasets.push({
+        label:c.nombre, data:[], borderColor:c.color, borderWidth:1.4,
+        backgroundColor:"transparent", fill:false, pointRadius:0, tension:.15
+      });
+    }
+    if(!chEq.data.datasets.some(d=>d.label===c.nombre)){
+      chEq.data.datasets.push({
+        label:c.nombre, data:[], borderColor:c.color, borderWidth:1.5,
+        pointRadius:0, tension:.12, fill:false
+      });
+    }
+  });
 
   R("cmp-section").style.display = "block";
-  R("cmp-sub").textContent =
-    `Periodo NRA-DAS oficial: ${NRA.nra_das_periodo_oficial||"–"}  ·  `+
-    `Correlación de retornos (5d, mismo periodo): ${NRA.correlacion_retornos_5d ?? "–"}  ·  `+
-    `Turnover anual: nuestro ${NRA.turnover_nuestro_anual_pct}%  vs  NRA-DAS ${NRA.turnover_oficial_nra_anual_pct}%`;
+  R("cmp-sub").textContent = COMPS.map(c=>
+    `${c.nombre}: periodo oficial ${c.data.periodo_oficial||"–"}, correlación 5d ${c.data.correlacion_retornos_5d ?? "–"}, `+
+    `turnover ${c.data.turnover_oficial_anual_pct}%/año (nuestro: ${c.data.turnover_nuestro_anual_pct}%/año)`
+  ).join("  ·  ");
 
-  const mp = NRA.mismo_periodo;
-  const rows = [
-    ["Nuestro sistema (Régimen+Tilt)", mp.nuestro_sistema, "var(--accent)"],
-    ["NRA-DAS", mp.nra_das, "#dc2626"],
-    ["Nasdaq/QQQ B&H", mp.nra_qqq_bh, "var(--bh)"],
-  ];
+  const rows = [["Nuestro sistema (Régimen+Tilt)", COMPS[0]?.data.mismo_periodo.nuestro_sistema, "var(--accent)"]];
+  COMPS.forEach(c=> rows.push([c.nombre, c.data.mismo_periodo.otro_sistema, c.color]));
+  // Nasdaq/QQQ B&H: casi idéntico entre sistemas (todos usan QQQ), mostramos el del primero
+  if(COMPS[0]) rows.push(["Nasdaq/QQQ B&H", COMPS[0].data.mismo_periodo.otro_qqq_bh, "var(--bh)"]);
+
   const tb = document.querySelector("#cmp-tab tbody");
   tb.innerHTML = rows.map(([name,g,color])=>
     `<tr><td class="rowname" style="font-weight:600;color:${color}">${name}</td>`+
     `<td>${fmtPct(g.cagr)}</td><td>${fmtPct(g.maxdd)}</td><td>${g.sharpe==null?"–":g.sharpe.toFixed(2)}</td></tr>`
-  ).join("") + `<tr><td class="rowname" style="font-size:11px">ventana: ${mp.ventana}</td><td colspan="3"></td></tr>`;
+  ).join("") + (COMPS[0] ? `<tr><td class="rowname" style="font-size:11px">ventana: ${COMPS[0].data.mismo_periodo.ventana}</td><td colspan="3"></td></tr>` : "");
 
   R("cmp-extra").textContent =
-    "Métricas 'mismo periodo' recalculadas sobre la ventana común a ambos sistemas "+
+    "Métricas 'mismo periodo' recalculadas sobre la ventana común a todos los sistemas "+
     "(desde que arranca el score de volatilidad del nuestro), para comparar en igualdad "+
     "de condiciones. Las métricas oficiales de cada proyecto (periodo completo) pueden "+
     "diferir por cubrir rangos de fechas distintos. Haz clic en cualquier línea de la "+
@@ -451,19 +461,22 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
         setRange(+b.dataset.y);
       });
     });
-    // comparación con NRA-DAS: opcional, si el fichero no existe simplemente no aparece
-    return fetch("./nra_das_comparativa.json?_="+Date.now())
-      .then(r=> r.ok ? r.json() : null)
-      .then(nra=>{
-        if(!nra) return;
-        NRA = nra;
-        fillComparativa();
-        const activo = document.querySelector('#tf button[data-y].on');
-        setRange(activo ? +activo.dataset.y : 0);
-        renderLegend(chExp, "legend-exp");
-        renderLegend(chEq, "legend-eq");
-      })
-      .catch(()=>{ /* sin comparativa, todo normal */ });
+    // comparaciones con otros sistemas: opcionales, cada una degrada sola si falta
+    const cargas = COMPARACIONES_CFG.map(cfg =>
+      fetch(`./${cfg.archivo}?_=`+Date.now())
+        .then(r=> r.ok ? r.json() : null)
+        .then(data=> data ? {nombre:data.nombre, color:cfg.color, data} : null)
+        .catch(()=> null)
+    );
+    return Promise.all(cargas).then(resultados=>{
+      COMPS = resultados.filter(Boolean);
+      if(COMPS.length===0) return;
+      fillComparativa();
+      const activo = document.querySelector('#tf button[data-y].on');
+      setRange(activo ? +activo.dataset.y : 0);
+      renderLegend(chExp, "legend-exp");
+      renderLegend(chEq, "legend-eq");
+    });
   })
   .catch(e=>{
     document.querySelector(".wrap").insertAdjacentHTML("beforeend",

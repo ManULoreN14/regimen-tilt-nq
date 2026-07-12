@@ -110,6 +110,11 @@ if errorlevel 1 (
     echo ERROR: fallo comparar_quant_engine.py
     goto :error
 )
+python generar_ensemble.py
+if errorlevel 1 (
+    echo ERROR: fallo generar_ensemble.py
+    goto :error
+)
 
 echo.
 echo ================================================================

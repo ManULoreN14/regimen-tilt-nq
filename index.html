@@ -15,7 +15,7 @@
   :root{
     --bg:#f7f7f4; --panel:#ffffff; --ink:#16181d; --muted:#6b7280;
     --line:#e6e6e0; --accent:#0d9488; --accent-soft:rgba(13,148,136,.12);
-    --bh:#c2703d; --nra:#5b6cd6; --flat:#9aa0a6; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
+    --bh:#c2703d; --nra:#dc2626; --flat:#9aa0a6; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
     --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
@@ -49,14 +49,18 @@
              transition:.12s}
   .tf button:hover{color:var(--ink)}
   .tf button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .tf button.cmp-btn{border-color:#5b6cd6;color:#5b6cd6}
-  .tf button.cmp-btn.on{background:#5b6cd6;color:#fff;border-color:#5b6cd6}
 
   .chartbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
             padding:16px 16px 10px;box-shadow:var(--shadow);margin-bottom:16px}
   .chartbox h2{font-size:13px;font-weight:600;margin:2px 4px 10px;color:var(--muted)}
   .cv{position:relative;height:240px}
   canvas{cursor:crosshair}
+  .chartbox .chartjs-legend ul{list-style:none;display:flex;flex-wrap:wrap;gap:4px 16px;
+    justify-content:center;margin:10px 4px 2px;padding:0}
+  .chartbox .chartjs-legend li{display:flex;align-items:center;gap:6px;cursor:pointer;
+    font-size:12px;color:var(--muted);user-select:none}
+  .chartbox .chartjs-legend li.hidden{opacity:.35;text-decoration:line-through}
+  .chartbox .chartjs-legend li span.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
 
   /* readout sincronizado — el elemento distintivo pedido por el usuario */
   #readout{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;
@@ -70,7 +74,7 @@
   #readout .exp b{color:#5eead4}
   #readout .st b{color:#5eead4}
   #readout .bh b{color:#f0b083}
-  #readout .nra b{color:#a5aeee}
+  #readout .nra b{color:#f5a3a3}
 
   .metrics{background:var(--panel);border:1px solid var(--line);border-radius:14px;
            box-shadow:var(--shadow);overflow:hidden}
@@ -120,9 +124,6 @@
     <button data-y="5">5A</button>
     <button data-y="10">10A</button>
     <button data-y="0" class="on">Todo</button>
-    <button id="cmp-toggle" class="cmp-btn" style="display:none;margin-left:auto">
-      Comparar con NRA-DAS
-    </button>
   </div>
 
   <div id="readout">
@@ -136,10 +137,12 @@
   <div class="chartbox">
     <h2>Exposición al Nasdaq (%)</h2>
     <div class="cv"><canvas id="chExp"></canvas></div>
+    <div class="chartjs-legend" id="legend-exp"></div>
   </div>
   <div class="chartbox">
     <h2>Equity acumulada — estrategia vs Nasdaq comprado y mantenido</h2>
     <div class="cv"><canvas id="chEq"></canvas></div>
+    <div class="chartjs-legend" id="legend-eq"></div>
   </div>
 
   <div class="metrics">
@@ -153,7 +156,7 @@
   <div class="metrics" id="cmp-section" style="display:none;margin-top:22px">
     <div style="padding:16px 20px 4px">
       <h2 style="font-size:13px;font-weight:600;margin:0 0 2px;color:var(--muted)">
-        Comparativa vs NRA-DAS <span style="color:#5b6cd6">·</span>
+        Comparativa vs NRA-DAS <span style="color:#dc2626">·</span>
       </h2>
       <p class="note" style="margin:2px 0 0" id="cmp-sub"></p>
     </div>
@@ -179,7 +182,11 @@ const crosshair = {
   afterDatasetsDraw(chart){
     const i = chart.$idx;
     if(i==null) return;
-    const meta = chart.getDatasetMeta(0);
+    let visIdx = 0;
+    for(let k=0;k<chart.data.datasets.length;k++){
+      if(chart.isDatasetVisible(k)){ visIdx=k; break; }
+    }
+    const meta = chart.getDatasetMeta(visIdx);
     const pt = meta.data[i];
     if(!pt) return;
     const {ctx, chartArea:{top,bottom}} = chart;
@@ -220,11 +227,32 @@ function showReadout(i){
   if(rnra){
     if(v.eqNra && v.eqNra[i]!=null){
       rnra.hidden=false;
-      rnra.querySelector("b").textContent = fmtX(v.eqNra[i]);
+      const expTxt = (v.expNra && v.expNra[i]!=null) ? ` (exp ${fmtPct(v.expNra[i])})` : "";
+      rnra.querySelector("b").textContent = fmtX(v.eqNra[i]) + expTxt;
     } else {
       rnra.hidden = true;
     }
   }
+}
+
+// leyenda HTML clicable, sincronizada con el estado real de cada dataset
+function renderLegend(chart, containerId){
+  const el = document.getElementById(containerId);
+  const ul = document.createElement("ul");
+  chart.data.datasets.forEach((ds, i)=>{
+    const li = document.createElement("li");
+    const visible = chart.isDatasetVisible(i);
+    if(!visible) li.classList.add("hidden");
+    li.innerHTML = `<span class="dot" style="background:${ds.borderColor}"></span>${ds.label}`;
+    li.addEventListener("click", ()=>{
+      chart.setDatasetVisibility(i, !chart.isDatasetVisible(i));
+      chart.update();
+      renderLegend(chart, containerId);
+    });
+    ul.appendChild(li);
+  });
+  el.innerHTML = "";
+  el.appendChild(ul);
 }
 
 // dado un evento de ratón, calcula el índice de dato más cercano
@@ -268,10 +296,7 @@ function build(){
     data:{labels:[], datasets:[
       { label:"Estrategia", data:[], borderColor:"#0d9488", borderWidth:1.6,
         backgroundColor:"rgba(13,148,136,.10)", fill:true,
-        pointRadius:0, tension:.15, stepped:false },
-      { label:"NRA-DAS", data:[], borderColor:"#5b6cd6", borderWidth:1.4,
-        backgroundColor:"transparent", fill:false,
-        pointRadius:0, tension:.15, hidden:true }
+        pointRadius:0, tension:.15, stepped:false }
     ]},
     options:oe
   });
@@ -284,13 +309,13 @@ function build(){
       {label:"Estrategia", data:[], borderColor:"#0d9488", borderWidth:1.8,
        pointRadius:0, tension:.12, fill:false},
       {label:"Nasdaq B&H", data:[], borderColor:"#c2703d", borderWidth:1.5,
-       pointRadius:0, tension:.12, fill:false, borderDash:[]},
-      {label:"NRA-DAS", data:[], borderColor:"#5b6cd6", borderWidth:1.5,
-       pointRadius:0, tension:.12, fill:false, hidden:true}
+       pointRadius:0, tension:.12, fill:false, borderDash:[]}
     ]},
     options:oq
   });
   attach(chExp); attach(chEq);
+  renderLegend(chExp, "legend-exp");
+  renderLegend(chEq, "legend-eq");
 }
 
 // filtra por años y repinta ambos gráficos con el mismo eje
@@ -323,10 +348,12 @@ function setRange(years){
   chExp.$view = view; chEq.$view = view;
 
   chExp.data.labels = fechas; chExp.data.datasets[0].data = exp;
-  if(NRA){ chExp.data.datasets[1].data = expNra; }
   chEq.data.labels  = fechas; chEq.data.datasets[0].data = eqS;
   chEq.data.datasets[1].data = eqB;
-  if(NRA){ chEq.data.datasets[2].data = eqNra; }
+  const idxExpNra = chExp.data.datasets.findIndex(d=>d.label==="NRA-DAS");
+  if(idxExpNra>=0) chExp.data.datasets[idxExpNra].data = expNra;
+  const idxEqNra = chEq.data.datasets.findIndex(d=>d.label==="NRA-DAS");
+  if(idxEqNra>=0) chEq.data.datasets[idxEqNra].data = eqNra;
   chExp.$idx=null; chEq.$idx=null;
   chExp.update(); chEq.update();
   syncHover(null);
@@ -370,7 +397,22 @@ if("serviceWorker" in navigator){
 
 function fillComparativa(){
   const R = id=>document.getElementById(id);
-  R("cmp-toggle").style.display = "inline-block";
+
+  // añade las series de NRA-DAS a ambos gráficos (si no estaban ya)
+  if(!chExp.data.datasets.some(d=>d.label==="NRA-DAS")){
+    chExp.data.datasets.push({
+      label:"NRA-DAS", data:[], borderColor:"#dc2626", borderWidth:1.4,
+      backgroundColor:"transparent", fill:false, pointRadius:0, tension:.15
+    });
+  }
+  if(!chEq.data.datasets.some(d=>d.label==="NRA-DAS")){
+    chEq.data.datasets.push({
+      label:"NRA-DAS", data:[], borderColor:"#dc2626", borderWidth:1.5,
+      pointRadius:0, tension:.12, fill:false
+    });
+  }
+
+  R("cmp-section").style.display = "block";
   R("cmp-sub").textContent =
     `Periodo NRA-DAS oficial: ${NRA.nra_das_periodo_oficial||"–"}  ·  `+
     `Correlación de retornos (5d, mismo periodo): ${NRA.correlacion_retornos_5d ?? "–"}  ·  `+
@@ -379,7 +421,7 @@ function fillComparativa(){
   const mp = NRA.mismo_periodo;
   const rows = [
     ["Nuestro sistema (Régimen+Tilt)", mp.nuestro_sistema, "var(--accent)"],
-    ["NRA-DAS", mp.nra_das, "#5b6cd6"],
+    ["NRA-DAS", mp.nra_das, "#dc2626"],
     ["Nasdaq/QQQ B&H", mp.nra_qqq_bh, "var(--bh)"],
   ];
   const tb = document.querySelector("#cmp-tab tbody");
@@ -392,16 +434,8 @@ function fillComparativa(){
     "Métricas 'mismo periodo' recalculadas sobre la ventana común a ambos sistemas "+
     "(desde que arranca el score de volatilidad del nuestro), para comparar en igualdad "+
     "de condiciones. Las métricas oficiales de cada proyecto (periodo completo) pueden "+
-    "diferir por cubrir rangos de fechas distintos.";
-
-  R("cmp-toggle").addEventListener("click", ()=>{
-    const on = chExp.data.datasets[1].hidden === false;
-    chExp.data.datasets[1].hidden = on;
-    chEq.data.datasets[2].hidden = on;
-    R("cmp-section").style.display = on ? "none" : "block";
-    R("cmp-toggle").classList.toggle("on", !on);
-    chExp.update(); chEq.update();
-  });
+    "diferir por cubrir rangos de fechas distintos. Haz clic en cualquier línea de la "+
+    "leyenda de los gráficos para mostrarla u ocultarla.";
 }
 
 fetch("./sistema_regimen_tilt.json?_="+Date.now())
@@ -423,9 +457,11 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       .then(nra=>{
         if(!nra) return;
         NRA = nra;
+        fillComparativa();
         const activo = document.querySelector('#tf button[data-y].on');
         setRange(activo ? +activo.dataset.y : 0);
-        fillComparativa();
+        renderLegend(chExp, "legend-exp");
+        renderLegend(chEq, "legend-eq");
       })
       .catch(()=>{ /* sin comparativa, todo normal */ });
   })

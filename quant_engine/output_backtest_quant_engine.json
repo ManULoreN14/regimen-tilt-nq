@@ -3,16 +3,16 @@
     "sistema": "quant_engine",
     "periodo": "2005-01-04 / 2026-07-02",
     "n_dias": 5401,
-    "cagr_pct": 9.91,
-    "vol_anual_pct": 9.81,
-    "sharpe": 1.013,
-    "sortino": 1.315,
-    "calmar": 0.456,
-    "max_dd_pct": -21.73,
+    "cagr_pct": 10.07,
+    "vol_anual_pct": 9.9,
+    "sharpe": 1.019,
+    "sortino": 1.309,
+    "calmar": 0.466,
+    "max_dd_pct": -21.62,
     "hit_rate_mensual_pct": 64.0,
-    "mejor_ano_pct": 37.17,
-    "peor_ano_pct": -20.14,
-    "equity_final": 7.5713
+    "mejor_ano_pct": 38.52,
+    "peor_ano_pct": -20.03,
+    "equity_final": 7.819
   },
   "qqq_bh": {
     "sistema": "QQQ_BH",
@@ -30,17 +30,17 @@
     "equity_final": 20.7656
   },
   "turnover": {
-    "turnover_anual_pct": 679.3,
-    "dias_con_cambio_peso_1pct": 546
+    "turnover_anual_pct": 624.3,
+    "dias_con_cambio_peso_1pct": 526
   },
   "crisis": {
-    "2008 (ene-dic) [quant_engine]": -6.65,
+    "2008 (ene-dic) [quant_engine]": 0.95,
     "2008 (ene-dic) [QQQ_BH]": -40.79,
-    "2020 Covid (feb-mar) [quant_engine]": -6.11,
+    "2020 Covid (feb-mar) [quant_engine]": -9.28,
     "2020 Covid (feb-mar) [QQQ_BH]": -14.2,
-    "2022 bajista (ene-dic) [quant_engine]": -20.0,
+    "2022 bajista (ene-dic) [quant_engine]": -19.89,
     "2022 bajista (ene-dic) [QQQ_BH]": -33.22,
-    "2025 aranceles (abr) [quant_engine]": 0.38,
+    "2025 aranceles (abr) [quant_engine]": 0.14,
     "2025 aranceles (abr) [QQQ_BH]": 0.59
   },
   "factores_en_produccion": {
@@ -103,5 +103,5 @@
     "oos_years": 1,
     "step_months": 6
   },
-  "generado": "2026-07-12T20:46:35.850063"
+  "generado": "2026-07-13T22:34:57.085771"
 }

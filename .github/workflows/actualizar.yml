@@ -22,10 +22,13 @@ jobs:
       - run: pip install pandas numpy yfinance requests
       - run: python generar_datos.py
       - run: python construir_sistema.py
+      # velas para la pestaña "Estudio técnico". Si falla (p.ej. intradía
+      # caído), no tumba el workflow: se omite y el resto se sube igual.
+      - run: python generar_precios.py || echo "generar_precios.py falló — se omite precios.json"
       - name: commit y push si hay cambios
         run: |
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
-          git add historico_maestro.csv sistema_regimen_tilt.json
+          git add historico_maestro.csv sistema_regimen_tilt.json precios.json
           git diff --staged --quiet || git commit -m "Actualización automática $(date -u +%Y-%m-%d)"
           git push

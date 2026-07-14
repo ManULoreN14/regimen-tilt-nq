@@ -100,6 +100,14 @@ if errorlevel 1 (
     echo ERROR: fallo construir_sistema.py
     goto :error
 )
+
+REM velas para la pestaña "Estudio tecnico" (NDX/VIX via yfinance).
+REM Tolerante: si falla (p.ej. intradia caido) NO abortamos el push;
+REM avisamos y seguimos, porque no debe bloquear la actualizacion real.
+python generar_precios.py
+if errorlevel 1 (
+    echo AVISO: generar_precios.py fallo - se sigue sin actualizar precios.json.
+)
 python comparar_nra_das.py
 if errorlevel 1 (
     echo ERROR: fallo comparar_nra_das.py

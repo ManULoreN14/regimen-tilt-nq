@@ -115,5 +115,5 @@
   "criterio_incorporacion": "|IC| > 0.03 AND p < 0.05 AND Stability >= 70% AND WF >= 3/4",
   "arquitectura": "Dual: Direction Score (tendencia) + Volatility Brake (riesgo)",
   "db_tabla": "backtest_extendido_2003_2026",
-  "generado": "2026-07-15T00:03:52.945710"
+  "generado": "2026-07-15T10:55:52.867215"
 }

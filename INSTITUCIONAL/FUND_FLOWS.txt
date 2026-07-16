@@ -71346,9 +71346,29 @@
                     "fundFlows": 435325200,
                     "sharesOutstanding": 663750000,
                     "aum": 481578502500
+                },
+                {
+                    "navDate": "2026-07-14",
+                    "nav": 719.718,
+                    "navChange": 7.834,
+                    "navChangePercent": 1.10046,
+                    "premiumDiscount": null,
+                    "fundFlows": 3559420000,
+                    "sharesOutstanding": 668750000,
+                    "aum": 476072425000
+                },
+                {
+                    "navDate": "2026-07-15",
+                    "nav": 717.678,
+                    "navChange": -2.04,
+                    "navChangePercent": -0.283444,
+                    "premiumDiscount": null,
+                    "fundFlows": -2986829700,
+                    "sharesOutstanding": 664600000,
+                    "aum": 478324582800
                 }
             ],
-            "asOfDate": "2026/07/13 12:00:00 AM (ET)"
+            "asOfDate": "2026/07/15 12:00:00 AM (ET)"
         }
     }
 }

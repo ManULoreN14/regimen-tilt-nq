@@ -3,8 +3,8 @@ import pandas as pd
 import os
 
 # Ruta ajustada al nuevo nombre de archivo
-archivo = r"C:\Users\m21lo\Desktop\FUND_FLOWS.txt"
-resultado = r"C:\Users\m21lo\Desktop\resultado_flujos.csv"
+archivo = r"C:\Users\m21lo\regimen-tilt-nq\INSTITUCIONAL\FUND_FLOWS.txt"
+resultado = r"C:\Users\m21lo\regimen-tilt-nq\INSTITUCIONAL\resultado_flujos.csv"
 
 def procesar():
     if not os.path.exists(archivo):

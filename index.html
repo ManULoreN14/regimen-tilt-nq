@@ -898,7 +898,41 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   const drawKey = () => `estudio:${serieKey}`;
 
   // ---------- persistencia + réplica de dibujos entre los 4 paneles ----------
-  const cleanPts = pts => (pts||[]).map(p=>({timestamp:p.timestamp, value:p.value}));
+  // KLineChart no resuelve 'timestamp' cuando un punto cae en el margen en
+  // blanco reservado tras la última vela (para "ver hacia el futuro") — el
+  // punto llega con 'value' pero sin 'timestamp'. Si se guardara así, el
+  // punto no tendría dónde colocarse en los demás paneles (aparecería
+  // desplazado o no aparecería). Se extrapola la fecha usando la posición
+  // en píxeles del propio evento + el intervalo de la última vela, para que
+  // dibujar hacia el margen futuro funcione en vez de romperse.
+  function resolveMissingTimestamps(slot, pts, evt){
+    const dl = slot.chart.getDataList();
+    if(!dl || dl.length<2) return (pts||[]).map(p=>({timestamp:p.timestamp, value:p.value}));
+    const lastIdx = dl.length-1;
+    const lastTs = dl[lastIdx].timestamp;
+    const interval = lastTs - dl[lastIdx-1].timestamp;
+    let lastPageX=null, barSpace=null;
+    try{
+      barSpace = slot.chart.getBarSpace();
+      const px = slot.chart.convertToPixel({timestamp:lastTs}, {paneId:'candle_pane'});
+      const paneX = Array.isArray(px) ? px[0].x : px.x;
+      // evt.x del propio KLineChart no comparte sistema de coordenadas con
+      // convertToPixel (verificado empíricamente); se usa pageX + el
+      // rectángulo real del canvas de la vela como referencia común.
+      const canvasEl = slot.el.querySelector('.echart canvas');
+      const rect = canvasEl.getBoundingClientRect();
+      lastPageX = rect.left + paneX;
+    }catch(e){}
+    return (pts||[]).map((p,i)=>{
+      if(p.timestamp!=null) return {timestamp:p.timestamp, value:p.value};
+      let ts=null;
+      if(evt && typeof evt.pageX==='number' && lastPageX!=null && barSpace){
+        ts = lastTs + Math.round((evt.pageX - lastPageX) / barSpace) * interval;
+      }
+      if(ts==null) ts = lastTs + interval * (i+1);   // último recurso, nunca queda sin fecha
+      return {timestamp:ts, value:p.value};
+    });
+  }
   function saveDraws(){ store.set(drawKey(), Object.entries(DRAWS).map(([id,d])=>Object.assign({id},d))); }
   function hexToRgba(hex, alpha){
     hex = (hex||'#0d9488').replace('#','');
@@ -974,17 +1008,19 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   function drawTpl(slot, name, points, id){
     const tpl = { name, points, groupId:'draw' };
     if(id) tpl.id = id;
-    tpl.onDrawEnd = ({overlay})=>{
-      DRAWS[overlay.id] = { name:overlay.name, points:cleanPts(overlay.points) };
+    tpl.onDrawEnd = (evt)=>{
+      const overlay = evt.overlay;
+      DRAWS[overlay.id] = { name:overlay.name, points:resolveMissingTimestamps(slot, overlay.points, evt) };
       saveDraws();
       slot.ov[overlay.id]=true;
       createOnAllSlots(overlay.id, overlay.name, DRAWS[overlay.id].points, DRAWS[overlay.id].styles, slot);
       const btn=document.querySelector('#view-estudio button.edraw.on'); if(btn) btn.classList.remove('on');
       return false;
     };
-    tpl.onPressedMoveEnd = ({overlay})=>{
+    tpl.onPressedMoveEnd = (evt)=>{
+      const overlay = evt.overlay;
       if(!DRAWS[overlay.id]) DRAWS[overlay.id]={name:overlay.name};
-      DRAWS[overlay.id].points = cleanPts(overlay.points);
+      DRAWS[overlay.id].points = resolveMissingTimestamps(slot, overlay.points, evt);
       saveDraws();
       updatePointsOnAllSlots(overlay.id, DRAWS[overlay.id].points, slot);
       return false;
@@ -1024,7 +1060,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   function closeDrawMenu(){ const m=$('edrawmenu'); m.hidden=true; m.innerHTML=''; }
   function openDrawMenu(overlay, evt){
     const menu=$('edrawmenu');
-    const rec = DRAWS[overlay.id] || {name:overlay.name, points:cleanPts(overlay.points)};
+    const rec = DRAWS[overlay.id] || {name:overlay.name, points:(overlay.points||[]).map(p=>({timestamp:p.timestamp, value:p.value}))};
     const isBox = rec.name==='areaBox';
     const curColor = (rec.styles && rec.styles.color) || kCssVar('--accent') || '#0d9488';
     const curSize  = (rec.styles && rec.styles.size) != null ? rec.styles.size : 1.6;

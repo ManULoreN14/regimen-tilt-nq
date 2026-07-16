@@ -1,0 +1,28 @@
+metric,label,h,n,IC,p,stability_%,fold_ICs,PASA
+vix9d_vix_ratio,VIX9D/VIX ratio,5,799,0.1148,0.00115,100.0,"[np.float64(0.057), np.float64(0.076), np.float64(0.032)]",True
+vix9d_vix_ratio,VIX9D/VIX ratio,10,399,0.1323,0.00816,100.0,"[np.float64(0.1), np.float64(0.1), np.float64(0.11)]",True
+vix9d_vix_ratio,VIX9D/VIX ratio,20,199,0.0942,0.18572,100.0,"[np.float64(0.083), np.float64(0.139), np.float64(0.012)]",False
+vix9d_vix_ratio,VIX9D/VIX ratio,60,65,0.0709,0.57445,66.7,"[np.float64(0.55), np.float64(-0.196), np.float64(0.379)]",False
+vix_vix3m_ratio,VIX/VIX3M ratio,5,866,0.1281,0.00016,100.0,"[np.float64(0.003), np.float64(0.115), np.float64(0.068)]",True
+vix_vix3m_ratio,VIX/VIX3M ratio,10,433,0.1712,0.00035,100.0,"[np.float64(0.09), np.float64(0.256), np.float64(0.129)]",True
+vix_vix3m_ratio,VIX/VIX3M ratio,20,216,0.2297,0.00067,100.0,"[np.float64(0.146), np.float64(0.276), np.float64(0.091)]",True
+vix_vix3m_ratio,VIX/VIX3M ratio,60,71,0.2091,0.08008,100.0,"[np.float64(0.052), np.float64(0.207), np.float64(0.337)]",False
+z_am_net,Asset Managers netos COT (z-score),5,1035,-0.0189,0.54402,100.0,"[np.float64(-0.067), np.float64(-0.033), np.float64(-0.019)]",False
+z_am_net,Asset Managers netos COT (z-score),10,517,-0.0391,0.37446,100.0,"[np.float64(-0.068), np.float64(-0.035), np.float64(-0.068)]",False
+z_am_net,Asset Managers netos COT (z-score),20,258,-0.0467,0.45506,100.0,"[np.float64(-0.092), np.float64(-0.019), np.float64(-0.018)]",False
+z_am_net,Asset Managers netos COT (z-score),60,85,-0.0799,0.46734,66.7,"[np.float64(-0.114), np.float64(-0.087), np.float64(0.2)]",False
+z_flow_20d,Flujo ETF acumulado 20d (z-score),5,1413,-0.0057,0.83039,100.0,"[np.float64(-0.015), np.float64(-0.092), np.float64(-0.094)]",False
+z_flow_20d,Flujo ETF acumulado 20d (z-score),10,706,-0.0166,0.66002,66.7,"[np.float64(0.028), np.float64(-0.045), np.float64(-0.139)]",False
+z_flow_20d,Flujo ETF acumulado 20d (z-score),20,352,-0.0506,0.34432,66.7,"[np.float64(-0.076), np.float64(0.008), np.float64(-0.174)]",False
+z_flow_20d,Flujo ETF acumulado 20d (z-score),60,116,-0.0765,0.41457,66.7,"[np.float64(-0.226), np.float64(0.01), np.float64(-0.176)]",False
+z_lev_net,Leveraged Money netos COT (z-score),5,1035,-0.0421,0.17547,66.7,"[np.float64(-0.062), np.float64(-0.077), np.float64(0.039)]",False
+z_lev_net,Leveraged Money netos COT (z-score),10,517,-0.0386,0.38162,66.7,"[np.float64(-0.025), np.float64(-0.091), np.float64(0.07)]",False
+z_lev_net,Leveraged Money netos COT (z-score),20,258,-0.0326,0.6023,100.0,"[np.float64(-0.001), np.float64(-0.094), np.float64(-0.03)]",False
+z_lev_net,Leveraged Money netos COT (z-score),60,85,-0.1137,0.30007,33.3,"[np.float64(-0.017), np.float64(0.053), np.float64(0.054)]",False
+z_pcr_equity,Put/Call Ratio equity (z-score),5,336,0.0265,0.62889,66.7,"[np.float64(-0.057), np.float64(0.102), np.float64(0.005)]",False
+z_pcr_equity,Put/Call Ratio equity (z-score),10,168,0.0581,0.4548,100.0,"[np.float64(0.062), np.float64(0.14), np.float64(0.088)]",False
+z_pcr_equity,Put/Call Ratio equity (z-score),20,84,0.0453,0.6823,100.0,"[np.float64(0.008), np.float64(0.117), np.float64(0.194)]",False
+z_vvix_spread,VVIX-VIX spread (z-score),5,1026,0.0783,0.01207,100.0,"[np.float64(0.043), np.float64(0.093), np.float64(0.07)]",True
+z_vvix_spread,VVIX-VIX spread (z-score),10,512,0.0788,0.07498,66.7,"[np.float64(-0.02), np.float64(0.067), np.float64(0.084)]",False
+z_vvix_spread,VVIX-VIX spread (z-score),20,256,0.0852,0.17425,66.7,"[np.float64(0.021), np.float64(-0.061), np.float64(0.117)]",False
+z_vvix_spread,VVIX-VIX spread (z-score),60,84,-0.0719,0.51559,66.7,"[np.float64(0.151), np.float64(-0.269), np.float64(-0.025)]",False

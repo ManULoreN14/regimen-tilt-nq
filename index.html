@@ -397,7 +397,7 @@
 
     <div class="cards" style="grid-template-columns:repeat(2,1fr)">
       <div class="card">
-        <div class="lbl">Régimen institucional (score compuesto)</div>
+        <div class="lbl">Score de estructura de volatilidad (IC-validado)</div>
         <div class="val" id="inst-score">–</div>
         <div class="foot" id="inst-score-lbl">–</div>
       </div>
@@ -1536,15 +1536,16 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
 
     document.getElementById('inst-asof').textContent = 'Datos a fecha ' + D.asof + '.';
 
-    // --- card: score compuesto ---
+    // --- card: score de estructura de volatilidad (IC-validado) ---
     const score = D.composite_score;
     const scoreEl = document.getElementById('inst-score');
     scoreEl.textContent = (score>0?'+':'') + score.toFixed(2);
     scoreEl.style.color = score > 0.15 ? 'var(--accent)' : (score < -0.15 ? 'var(--baj)' : 'var(--muted)');
-    document.getElementById('inst-score-lbl').textContent =
-      score > 0.15 ? 'Sesgo constructivo (flujo/posicionamiento reales favorable)' :
-      score < -0.15 ? 'Sesgo defensivo (flujo/posicionamiento reales débil)' :
-      'Neutral — sin extremos claros';
+    document.getElementById('inst-score-lbl').innerHTML =
+      (score > 0.15 ? 'Tensión en la parte corta de la curva de vol → rebote esperado (h=5-20d)' :
+       score < -0.15 ? 'Curva de vol relajada → sin sesgo de rebote a corto plazo' :
+       'Neutral — sin extremos claros') +
+      '<br><span style="font-size:10.5px">Solo VIX9D/VIX, VIX/VIX3M y VVIX-VIX (únicas que pasan IC/walk-forward/estabilidad). Flujos, COT y PCR NO pasaron el harness — se muestran abajo como contexto, sin peso en este score.</span>';
 
     // --- card: divergencia flujo vs. precio (20 sesiones) ---
     const lastIdx = D.dates.length - 1;
@@ -1606,34 +1607,34 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       const pcrEq = D.pcr_equity[lastIdx], zPcr = D.z_pcr_equity[lastIdx];
       const skewLast = D.skew[lastIdx];
 
+      bits.push(`<b>Lo único que ha pasado el harness de validación</b> (IC Spearman + walk-forward de 3 tramos + estabilidad) es la estructura de la curva de volatilidad: ${
+        score > 0.15 ? `hoy está en tensión (score ${score.toFixed(2)}) — históricamente esto ha precedido rebotes de precio a 5-20 sesiones, con IC modesto pero consistente en 3 periodos distintos desde 2006.`
+        : score < -0.15 ? `hoy está relajada (score ${score.toFixed(2)}) — sin sesgo de rebote a corto plazo detectado.`
+        : `hoy neutral (score ${score.toFixed(2)}) — sin extremo claro.`
+      }`);
+
+      bits.push(`<b>Contexto de posicionamiento (NO validado como predictivo por el harness, pero informativo):</b>`);
       if (zAmL != null && zLevL != null && Math.sign(zAmL) !== Math.sign(zLevL) && Math.abs(zAmL)>0.4 && Math.abs(zLevL)>0.4){
-        bits.push(`Hay <b>divergencia entre actores</b>: el dinero real (Asset Managers, z=${zAmL.toFixed(2)}) y los fondos apalancados (Leveraged Money, z=${zLevL.toFixed(2)}) están posicionados en direcciones opuestas — la lectura más rica que da este dataset, más que cualquier métrica sola.`);
-      } else {
-        bits.push(`Dinero real y fondos apalancados están alineados en su posicionamiento (sin divergencia relevante ahora mismo).`);
+        bits.push(`hay divergencia entre dinero real (Asset Managers, z=${zAmL.toFixed(2)}) y fondos apalancados (Leveraged Money, z=${zLevL.toFixed(2)});`);
       }
-
-      if (zLevL != null && zLevL < -1.2) bits.push(`Los apalancados están en cortos inusualmente altos (percentil histórico bajo) — cualquier ruptura alcista tiene <b>fuel de short-covering</b> detrás.`);
-      if (zLevL != null && zLevL > 1.2) bits.push(`Los apalancados están en largos inusualmente altos — más expuestos a una <b>liquidación rápida</b> si el precio rompe a la baja.`);
-
+      if (zLevL != null && zLevL < -1.2) bits.push(`los apalancados están en cortos inusualmente altos (posible fuel de short-covering si rompe al alza, sin confirmar estadísticamente);`);
+      if (zLevL != null && zLevL > 1.2) bits.push(`los apalancados están en largos inusualmente altos (más expuestos a liquidación rápida a la baja, sin confirmar estadísticamente);`);
       if (priceChg!=null && flow20!=null && (priceChg>0)!==(flow20>0)){
         bits.push(priceChg>0
-          ? `El precio sube pero el flujo neto del ETF sale — patrón de "distribución" aparente, aunque tu propio estudio histórico muestra que este patrón ha precedido más veces subidas que bajadas.`
-          : `El precio baja pero el flujo neto entra — posible compra institucional de la caída.`);
+          ? `el precio sube pero el flujo neto del ETF sale (patrón de "distribución" aparente — recuerda que en tu propio event study este patrón históricamente precedió más subidas que bajadas, aunque tampoco pasó el harness riguroso);`
+          : `el precio baja pero el flujo neto entra (posible compra institucional de la caída, sin confirmar estadísticamente);`);
+      }
+      if (zPcr != null && Math.abs(zPcr) > 1) {
+        bits.push(zPcr > 0 ? `el Put/Call Ratio (${pcrEq}) está elevado (miedo minorista vía Puts);` : `el Put/Call Ratio (${pcrEq}) está bajo (euforia minorista vía Calls);`);
       }
 
+      bits.push(`<b>GEX y SKEW son lecturas de un solo día (no series históricas), así que no se pueden pasar por el mismo harness:</b>`);
       if (g && g.net_gex_45d!=null){
         bits.push(g.net_gex_45d>=0
-          ? `El posicionamiento de opciones (GEX) es <b>positivo</b>: espera un rango más "pegado" entre ${g.put_wall_strike} y ${g.call_wall_strike} salvo catalizador fuerte.`
-          : `El posicionamiento de opciones (GEX) es <b>negativo</b>: los dealers amplifican el movimiento — más riesgo de velocidad en cualquier dirección.`);
+          ? `posicionamiento de opciones positivo — rango más "pegado" entre ${g.put_wall_strike} y ${g.call_wall_strike} salvo catalizador fuerte;`
+          : `posicionamiento de opciones negativo — dealers amplifican el movimiento;`);
       }
-
-      if (zPcr != null && Math.abs(zPcr) > 1) {
-        bits.push(zPcr > 0 ? `El Put/Call Ratio (${pcrEq}) está elevado — algo de miedo minorista vía compra de Puts.`
-                            : `El Put/Call Ratio (${pcrEq}) está bajo — algo de euforia minorista vía compra de Calls.`);
-      }
-      if (skewLast != null && skewLast > 140) bits.push(`El SKEW (${skewLast}) sigue en zona alta — cobertura de cola algo cara, aunque con solo unos meses de histórico esto aún no tiene z-score fiable.`);
-
-      bits.push(`<i>Esto es una lectura automática basada en reglas simples sobre los datos de hoy — no es una señal validada de tu harness IC/walk-forward, solo contexto para tu propia lectura.</i>`);
+      if (skewLast != null && skewLast > 140) bits.push(`SKEW (${skewLast}) en zona alta — cobertura de cola algo cara.`);
 
       document.getElementById('inst-interpretacion').innerHTML = bits.join(' ');
     })();

@@ -1,5 +1,39 @@
 # Notas — Pestaña "Institucional"
 
+## CORRECCIÓN IMPORTANTE (posterior a la primera versión de este documento)
+
+El score compuesto original usaba pesos inventados por intuición
+(0.30/0.20/0.25...) sobre flujos, COT y PCR — violando el propio
+principio del proyecto de que los pesos deben derivarse por IC. Se ha
+corrido `ic_harness.py` (IC Spearman forward continuo, walk-forward de
+3 tramos cronológicos, estabilidad ≥66.7%, |IC|>0.03, p<0.05) sobre las
+7 señales candidatas. Resultado real (`ic_harness_results.csv`):
+
+**Pasan el harness** (y ahora componen el score, con pesos = |IC| normalizado):
+- VIX/VIX3M ratio — IC=0.230, h=20d, p=0.0007, estabilidad 100% → peso 0.522
+- VIX9D/VIX ratio — IC=0.132, h=10d, p=0.008, estabilidad 100% → peso 0.300
+- VVIX-VIX spread — IC=0.078, h=5d, p=0.012, estabilidad 100% → peso 0.178
+
+**NO pasan** (se muestran en el dashboard como contexto de posicionamiento,
+pero sin peso en el score ni pretensión de poder predictivo demostrado):
+- Flujo ETF 20d (IC no significativo en ningún horizonte, p>0.3 siempre)
+- COT Asset Managers (ídem)
+- COT Leveraged Money (ídem)
+- Put/Call Ratio equity (ídem)
+
+Esto invierte la narrativa que se había dado inicialmente (que el COT
+era "el dato más rico"). Es rico como *contexto* de posicionamiento,
+pero no ha demostrado poder predictivo cuando se le exige el mismo
+rigor que al resto del sistema. Aviso adicional: los IC que sí pasan
+son estadísticamente significativos pero modestos (0.08–0.23) — no
+sobrevender la fuerza de la señal.
+
+GEX y SKEW no se pueden pasar por este harness porque son lecturas de
+un único día (no series históricas) — quedan fuera del score por
+diseño, no porque hayan fallado nada.
+
+---
+
 Ideas propias añadidas al análisis inicial de Gemini sobre la huella
 institucional (flujos, COT, PCR, complejo de volatilidad, SKEW, GEX).
 Estado a fecha de esta sesión: los 5 puntos están implementados en

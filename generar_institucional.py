@@ -277,7 +277,8 @@ def build(base: Path) -> dict:
 
     for col, z in [("pcr_equity", "z_pcr_equity"), ("vvix_vix_spread", "z_vvix_spread"),
                    ("skew", "z_skew"), ("am_net", "z_am_net"), ("lev_net", "z_lev_net"),
-                   ("flow_usd_20d", "z_flow_20d")]:
+                   ("flow_usd_20d", "z_flow_20d"),
+                   ("vix9d_vix_ratio", "z_vix9d_vix_ratio"), ("vix_vix3m_ratio", "z_vix_vix3m_ratio")]:
         if col in m.columns:
             m[z] = zscore(m[col])
 
@@ -292,12 +293,21 @@ def build(base: Path) -> dict:
         return [None if pd.isna(v) else round(float(v), 4) for v in m[col]]
 
     last = m.iloc[-1]
-    composite = (
-        0.30 * clip(last.get("z_flow_20d")) +
-        -0.20 * clip(last.get("z_pcr_equity")) +
-        -0.25 * clip(last.get("z_lev_net")) * -1 +  # lev_net muy negativo (cortos extremos) = riesgo de squeeze, no puramente bajista
-        0.25 * clip(last.get("z_am_net"))
-    )
+    # --- Score compuesto: SOLO señales que pasan el harness real de validación
+    # (IC Spearman forward, walk-forward de 3 tramos, estabilidad >=66.7%,
+    # |IC|>0.03, p<0.05 -- ver ic_harness.py). Flujos, COT y PCR NO pasaron
+    # el harness (ver ic_harness_results.csv) y por tanto quedan FUERA del
+    # score -- se muestran igualmente en el dashboard como contexto de
+    # posicionamiento, pero sin pretender que aporten poder predictivo
+    # demostrado. Pesos derivados del propio |IC| de cada señal en su mejor
+    # horizonte encontrado, no inventados por intuición:
+    #   VIX/VIX3M ratio  (IC=0.230, h=20d, p=0.0007, estabilidad 100%) -> peso 0.522
+    #   VIX9D/VIX ratio  (IC=0.132, h=10d, p=0.008,  estabilidad 100%) -> peso 0.300
+    #   VVIX-VIX spread  (IC=0.078, h=5d,  p=0.012,  estabilidad 100%) -> peso 0.178
+    # Las 3 tienen IC de signo positivo: valor alto -> retorno futuro esperado
+    # positivo (tensión en la parte corta de la curva de vol -> rebote).
+    IC_WEIGHTS = {"z_vix_vix3m_ratio": 0.522, "z_vix9d_vix_ratio": 0.300, "z_vvix_spread": 0.178}
+    composite = sum(w * clip(last.get(k)) for k, w in IC_WEIGHTS.items())
 
     payload = {
         "asof": m["date"].max().strftime("%Y-%m-%d"),
@@ -312,11 +322,24 @@ def build(base: Path) -> dict:
         "am_net": series("am_net"), "lev_net": series("lev_net"), "dealer_net": series("dealer_net"),
         "z_pcr_equity": series("z_pcr_equity"), "z_vvix_spread": series("z_vvix_spread"),
         "z_am_net": series("z_am_net"), "z_lev_net": series("z_lev_net"), "z_flow_20d": series("z_flow_20d"),
+        "z_vix9d_vix_ratio": series("z_vix9d_vix_ratio"), "z_vix_vix3m_ratio": series("z_vix_vix3m_ratio"),
         "vix_curve": vix_curve or {},
         "gex": gex or {},
         "composite_score": round(float(composite), 3),
+        "validation": {
+            "metodo": "IC Spearman forward (con lag de 3 sesiones), walk-forward de 3 tramos cronológicos, estabilidad >=66.7%, |IC|>0.03, p<0.05. Ver ic_harness.py / ic_harness_results.csv.",
+            "señales_en_el_score": [
+                {"metric":"vix_vix3m_ratio","horizonte_dias":20,"IC":0.230,"p":0.0007,"estabilidad_%":100,"peso":0.522},
+                {"metric":"vix9d_vix_ratio","horizonte_dias":10,"IC":0.132,"p":0.008,"estabilidad_%":100,"peso":0.300},
+                {"metric":"vvix_vix_spread","horizonte_dias":5,"IC":0.078,"p":0.012,"estabilidad_%":100,"peso":0.178},
+            ],
+            "señales_fuera_del_score_no_pasan_harness": [
+                "flow_usd_20d (flujo ETF)", "am_net (COT Asset Managers)",
+                "lev_net (COT Leveraged Money)", "pcr_equity (Put/Call Ratio)"
+            ],
+        },
     }
-    return payload
+    return payload, m
 
 
 def main():
@@ -324,6 +347,10 @@ def main():
     ap.add_argument("--dir", default=str(Path(r"INSTITUCIONAL")),
                      help="Carpeta con los CSV/TXT institucionales")
     ap.add_argument("--out", default="institucional.json")
+    ap.add_argument("--dump-merged", default=None,
+                     help="Si se indica, también escribe el DataFrame combinado completo "
+                          "(todas las fechas, sin redondear/recortar) a este CSV -- lo usan "
+                          "ic_harness.py y event_study.py como 'master_full.csv'.")
     args = ap.parse_args()
 
     base = Path(args.dir)
@@ -331,10 +358,14 @@ def main():
         _log(f"ERROR — no existe la carpeta {base.resolve()}")
         sys.exit(1)
 
-    payload = build(base)
+    payload, merged = build(base)
     Path(args.out).write_text(json.dumps(payload), encoding="utf-8")
     _log(f"Escrito {args.out} — asof {payload['asof']}, {len(payload['dates'])} fechas, "
          f"composite_score={payload['composite_score']}")
+
+    if args.dump_merged:
+        merged.to_csv(args.dump_merged, index=False)
+        _log(f"Escrito {args.dump_merged} ({len(merged)} filas) para ic_harness.py / event_study.py")
 
 
 if __name__ == "__main__":

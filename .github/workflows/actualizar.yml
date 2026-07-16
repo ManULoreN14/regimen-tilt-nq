@@ -2,10 +2,11 @@ name: Actualizar Régimen+Tilt
 
 on:
   schedule:
-    # 22:30 Madrid en horario de verano (CEST, UTC+2) -> 20:30 UTC.
-    # En invierno (CET, UTC+1) esto corre a las 21:30 Madrid; sigue siendo
-    # ~1.5 h tras el cierre de EE. UU., así que los datos ya están.
-    - cron: '30 20 * * 1-5'
+    # 2:00 Madrid, todo el año (ajustado por cambio de hora).
+    # Marzo-Octubre (CEST, UTC+2): 2:00 Madrid -> 00:00 UTC.
+    - cron: '0 0 * 3-10 1-5'
+    # Noviembre-Febrero (CET, UTC+1): 2:00 Madrid -> 01:00 UTC.
+    - cron: '0 1 * 1,2,11,12 1-5'
   workflow_dispatch: {}   # botón manual "Run workflow" en la pestaña Actions
 
 permissions:

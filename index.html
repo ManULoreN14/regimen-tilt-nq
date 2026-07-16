@@ -247,6 +247,7 @@
   <div class="etabs">
     <button id="tab-panel" class="on">Panel</button>
     <button id="tab-estudio">Estudio técnico</button>
+    <button id="tab-inst">Institucional</button>
   </div>
 
   <div id="view-panel">
@@ -392,6 +393,83 @@
     </p>
   </div>
 
+  <div id="view-inst" hidden>
+
+    <div class="cards" style="grid-template-columns:repeat(2,1fr)">
+      <div class="card">
+        <div class="lbl">Régimen institucional (score compuesto)</div>
+        <div class="val" id="inst-score">–</div>
+        <div class="foot" id="inst-score-lbl">–</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Divergencia flujo vs. precio (20 sesiones)</div>
+        <div class="val" id="inst-div" style="font-size:22px;margin-top:8px">–</div>
+        <div class="foot" id="inst-div-foot">–</div>
+      </div>
+    </div>
+    <div class="cards" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
+      <div class="card">
+        <div class="lbl">Gamma dealer (≤45d) · muros · liquidez</div>
+        <div class="val" id="inst-gex" style="font-size:22px;margin-top:8px">–</div>
+        <div class="foot" id="inst-gex-foot">–</div>
+      </div>
+      <div class="card">
+        <div class="lbl">COT NASDAQ-100 (semanal) · curva VIX</div>
+        <div class="val" id="inst-cot" style="font-size:22px;margin-top:8px">–</div>
+        <div class="foot" id="inst-cot-foot">–</div>
+      </div>
+    </div>
+
+    <p class="note" id="inst-asof" style="margin:10px 2px 4px"></p>
+
+    <div class="chartbox" style="background:var(--readout-bg);color:#fff">
+      <h2 style="color:#9aa0a6">Lectura global — qué están haciendo los institucionales ahora mismo</h2>
+      <p id="inst-interpretacion" style="font-size:14px;line-height:1.6;margin:4px 4px 2px"></p>
+    </div>
+
+    <div class="tf" id="tf-inst">
+      <button data-y="1">1A</button>
+      <button data-y="5">5A</button>
+      <button data-y="10">10A</button>
+      <button data-y="20">20A</button>
+      <button data-y="0" class="on">Todo</button>
+    </div>
+
+    <div class="chartbox">
+      <h2>Precio (QQQ) vs. flujo neto institucional (Invesco QQQ, USD/día)</h2>
+      <div class="cv"><canvas id="chFlow"></canvas></div>
+      <div class="chartjs-legend" id="legend-flow"></div>
+    </div>
+
+    <div class="chartbox">
+      <h2>Posicionamiento COT (NASDAQ-100 futuros) vs. precio</h2>
+      <div class="cv"><canvas id="chCot"></canvas></div>
+      <div class="chartjs-legend" id="legend-cot"></div>
+      <p class="note" style="margin:6px 4px 0">Asset Managers = "dinero real" (fondos, aseguradoras, pensiones). Leveraged Money = fondos macro/CTA/hedge funds apalancados. Neto = largos − cortos, contratos.</p>
+    </div>
+
+    <div class="chartbox">
+      <h2>Complejo de volatilidad — VIX · VIX9D · VIX3M · VVIX</h2>
+      <div class="cv"><canvas id="chVol"></canvas></div>
+      <div class="chartjs-legend" id="legend-vol"></div>
+    </div>
+
+    <div class="chartbox">
+      <h2>Sentimiento — Put/Call Ratio y SKEW (CBOE)</h2>
+      <div class="cv"><canvas id="chSent"></canvas></div>
+      <div class="chartjs-legend" id="legend-sent"></div>
+    </div>
+
+    <div class="chartbox">
+      <h2>Perfil de Gamma Exposure (GEX) por strike — vencimientos ≤45 días</h2>
+      <div class="cv"><canvas id="chGex"></canvas></div>
+      <div class="chartjs-legend" id="legend-gex"></div>
+      <p class="note" id="gex-note" style="margin:6px 4px 0"></p>
+    </div>
+
+    <p class="foot-src" id="inst-src">Fuentes: ETF.com/Invesco (flujos), CFTC (COT), CBOE (PCR, VIX/VIX9D/VIX3M/VVIX/SKEW), Nasdaq (cadena de opciones QQQ). Actualización manual periódica — ver generar_institucional.py.</p>
+
+  </div><!-- /view-inst -->
 
 </div>
 
@@ -1384,19 +1462,316 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
 
   // ---------- pestañas ----------
   function setTab(t){
-    const est=t==='estudio';
-    $('tab-estudio').classList.toggle('on', est); $('tab-panel').classList.toggle('on', !est);
-    $('view-panel').hidden=est; $('view-estudio').hidden=!est;
+    const est=t==='estudio', inst=t==='inst';
+    $('tab-estudio').classList.toggle('on', est);
+    $('tab-panel').classList.toggle('on', t==='panel');
+    $('tab-inst').classList.toggle('on', inst);
+    $('view-panel').hidden = (t!=='panel');
+    $('view-estudio').hidden = !est;
+    $('view-inst').hidden = !inst;
     if(est){ requestAnimationFrame(()=> initEstudio().then(()=> slots.forEach(s=>s.chart.resize()))); startSpot(); }
     else stopSpot();
+    if(inst && !window.__instLoaded){ loadInstitucional(); }
   }
   $('tab-panel').addEventListener('click', ()=>setTab('panel'));
   $('tab-estudio').addEventListener('click', ()=>setTab('estudio'));
+  $('tab-inst').addEventListener('click', ()=>setTab('inst'));
   window.addEventListener('resize', ()=>{ if(!$('view-estudio').hidden) slots.forEach(s=>s.chart.resize()); });
 
   // re-tema: aplica los nuevos colores a los 4 paneles cuando cambia el tema
   // (aunque el Estudio Técnico no se haya abierto todavía en esta sesión)
   if(window.RTTheme) RTTheme.onChange(()=>{ slots.forEach(s=>s.chart.setStyles(buildStyles())); });
+})();
+</script>
+
+<script>
+// ============================================================
+// Pestaña "Institucional" — huella institucional (flujos, COT,
+// complejo de volatilidad, sentimiento, GEX). Lee institucional.json,
+// generado por generar_institucional.py a partir de la carpeta
+// INSTITUCIONAL/ del repo.
+// ============================================================
+(function(){
+  const THEME_LINE = () => getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();
+  const THEME_TICK = () => getComputedStyle(document.documentElement).getPropertyValue('--tick').trim();
+  const COLORS = {
+    price:'#9aa0a6', flow:'#0d9488', flow20:'#5b6478',
+    am:'#0d9488', lev:'#c0392b', dealer:'#8b93a1',
+    vix:'#16181d', vix9d:'#2dd4bf', vix3m:'#9aa0a6', vvix:'#c0392b',
+    pcr:'#0d9488', skew:'#c0392b',
+    callgex:'#0d9488', putgex:'#c0392b'
+  };
+
+  function baseOpts(extra){
+    return Object.assign({
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{legend:{display:false}},
+      scales:{ x:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), maxTicksLimit:10}} }
+    }, extra||{});
+  }
+
+  const instCharts = []; // {chart, series:[arr, arr, ...]} en el mismo orden que los datasets
+  function regInst(chart, series){ instCharts.push({chart, series}); }
+  function applyInstRange(years, allDates){
+    const n = allDates.length;
+    const startIdx = years === 0 ? 0 : Math.max(0, n - years*252);
+    instCharts.forEach(({chart, series})=>{
+      chart.data.labels = allDates.slice(startIdx);
+      chart.data.datasets.forEach((ds, i)=>{ ds.data = series[i].slice(startIdx); });
+      chart.update('none');
+    });
+  }
+
+  window.loadInstitucional = async function(){
+    window.__instLoaded = true;
+    let D;
+    try{
+      const r = await fetch('institucional.json', {cache:'no-store'});
+      D = await r.json();
+    }catch(e){
+      document.getElementById('inst-asof').textContent = 'No se pudo cargar institucional.json — genera el archivo con generar_institucional.py y publícalo junto a index.html.';
+      return;
+    }
+
+    document.getElementById('inst-asof').textContent = 'Datos a fecha ' + D.asof + '.';
+
+    // --- card: score compuesto ---
+    const score = D.composite_score;
+    const scoreEl = document.getElementById('inst-score');
+    scoreEl.textContent = (score>0?'+':'') + score.toFixed(2);
+    scoreEl.style.color = score > 0.15 ? 'var(--accent)' : (score < -0.15 ? 'var(--baj)' : 'var(--muted)');
+    document.getElementById('inst-score-lbl').textContent =
+      score > 0.15 ? 'Sesgo constructivo (flujo/posicionamiento reales favorable)' :
+      score < -0.15 ? 'Sesgo defensivo (flujo/posicionamiento reales débil)' :
+      'Neutral — sin extremos claros';
+
+    // --- card: divergencia flujo vs. precio (20 sesiones) ---
+    const lastIdx = D.dates.length - 1;
+    const priceChg = D.price_20d_chg_pct ? D.price_20d_chg_pct[lastIdx] : null;
+    const flow20 = D.flow_usd_20d ? D.flow_usd_20d[lastIdx] : null;
+    const divEl = document.getElementById('inst-div');
+    const divFootEl = document.getElementById('inst-div-foot');
+    if (priceChg != null && flow20 != null){
+      const priceUp = priceChg > 0, flowIn = flow20 > 0;
+      const converge = priceUp === flowIn;
+      divEl.textContent = `Precio ${priceChg>=0?'+':''}${priceChg.toFixed(1)}% / Flujo ${flowIn?'entrando':'saliendo'}`;
+      divEl.style.color = converge ? 'var(--muted)' : (priceUp ? 'var(--baj)' : 'var(--accent)');
+      divFootEl.textContent = converge
+        ? 'Precio y flujo se mueven en la misma dirección — sin divergencia relevante.'
+        : (priceUp
+            ? 'Precio sube pero el flujo neto sale — patrón de distribución (ver notas: contraintuitivamente, esto ha precedido retornos por ENCIMA de la media en tu estudio histórico, no por debajo).'
+            : 'Precio baja pero el flujo neto entra — puede ser dinero real comprando la caída.');
+    }
+
+    // --- card: GEX + muros + zero-gamma + liquidez ---
+    const g = D.gex && D.gex.summary;
+    if (g){
+      document.getElementById('inst-gex').textContent = (g.net_gex_45d>=0?'GEX +':'GEX −');
+      let liq = '';
+      if (g.vol_oi_ratio_near != null){
+        liq = g.vol_oi_ratio_near < 0.3
+          ? ' · liquidez baja (vol/OI '+g.vol_oi_ratio_near.toFixed(2)+') — libro fino, movimientos más bruscos.'
+          : ' · liquidez normal (vol/OI '+g.vol_oi_ratio_near.toFixed(2)+').';
+      }
+      document.getElementById('inst-gex-foot').innerHTML =
+        `Spot ${g.spot.toFixed(1)} · Call wall <b>${g.call_wall_strike}</b> · Put wall <b>${g.put_wall_strike}</b>`+
+        (g.zero_gamma_strike!=null ? ` · flip gamma ≈ <b>${g.zero_gamma_strike}</b>` : '')+`<br>`+
+        (g.net_gex_45d>=0
+          ? 'Positivo → dealers amortiguan el movimiento (rango pegajoso entre muros).'
+          : 'Negativo → dealers amplifican el movimiento (más riesgo de velocidad/gap).')+liq;
+    }
+
+    // --- card: COT + curva VIX ---
+    const amNet = D.am_net[lastIdx], levNet = D.lev_net[lastIdx];
+    const zLev = D.z_lev_net[lastIdx], zAm = D.z_am_net[lastIdx];
+    if (amNet!=null){
+      document.getElementById('inst-cot').textContent =
+        `AM ${amNet>=0?'+':''}${(amNet/1000).toFixed(1)}k / Lev ${levNet>=0?'+':''}${(levNet/1000).toFixed(1)}k`;
+      let msg = 'Posicionamiento dentro de rangos normales.';
+      if (zLev != null && zLev < -1.5) msg = 'Apalancados en cortos históricamente extremos → riesgo de short-covering si el precio rompe al alza.';
+      else if (zLev != null && zLev > 1.5) msg = 'Apalancados en largos históricamente extremos → riesgo de liquidación rápida si el precio rompe a la baja.';
+      if (zAm != null && zAm < -1.5) msg += ' Dinero real también reduciendo exposición — señal más seria.';
+      const vc = D.vix_curve;
+      if (vc && vc.regime){
+        msg += ` · Curva VIX en <b>${vc.regime}</b>`+(vc.regime==='backwardation' ? ' (estrés — señal más limpia que el nivel de VIX solo).' : '.');
+      }
+      document.getElementById('inst-cot-foot').innerHTML = msg;
+    }
+
+    // --- interpretación global (narrativa generada a partir de los datos) ---
+    (function(){
+      const bits = [];
+      const zAmL = zAm, zLevL = zLev;
+      const pcrEq = D.pcr_equity[lastIdx], zPcr = D.z_pcr_equity[lastIdx];
+      const skewLast = D.skew[lastIdx];
+
+      if (zAmL != null && zLevL != null && Math.sign(zAmL) !== Math.sign(zLevL) && Math.abs(zAmL)>0.4 && Math.abs(zLevL)>0.4){
+        bits.push(`Hay <b>divergencia entre actores</b>: el dinero real (Asset Managers, z=${zAmL.toFixed(2)}) y los fondos apalancados (Leveraged Money, z=${zLevL.toFixed(2)}) están posicionados en direcciones opuestas — la lectura más rica que da este dataset, más que cualquier métrica sola.`);
+      } else {
+        bits.push(`Dinero real y fondos apalancados están alineados en su posicionamiento (sin divergencia relevante ahora mismo).`);
+      }
+
+      if (zLevL != null && zLevL < -1.2) bits.push(`Los apalancados están en cortos inusualmente altos (percentil histórico bajo) — cualquier ruptura alcista tiene <b>fuel de short-covering</b> detrás.`);
+      if (zLevL != null && zLevL > 1.2) bits.push(`Los apalancados están en largos inusualmente altos — más expuestos a una <b>liquidación rápida</b> si el precio rompe a la baja.`);
+
+      if (priceChg!=null && flow20!=null && (priceChg>0)!==(flow20>0)){
+        bits.push(priceChg>0
+          ? `El precio sube pero el flujo neto del ETF sale — patrón de "distribución" aparente, aunque tu propio estudio histórico muestra que este patrón ha precedido más veces subidas que bajadas.`
+          : `El precio baja pero el flujo neto entra — posible compra institucional de la caída.`);
+      }
+
+      if (g && g.net_gex_45d!=null){
+        bits.push(g.net_gex_45d>=0
+          ? `El posicionamiento de opciones (GEX) es <b>positivo</b>: espera un rango más "pegado" entre ${g.put_wall_strike} y ${g.call_wall_strike} salvo catalizador fuerte.`
+          : `El posicionamiento de opciones (GEX) es <b>negativo</b>: los dealers amplifican el movimiento — más riesgo de velocidad en cualquier dirección.`);
+      }
+
+      if (zPcr != null && Math.abs(zPcr) > 1) {
+        bits.push(zPcr > 0 ? `El Put/Call Ratio (${pcrEq}) está elevado — algo de miedo minorista vía compra de Puts.`
+                            : `El Put/Call Ratio (${pcrEq}) está bajo — algo de euforia minorista vía compra de Calls.`);
+      }
+      if (skewLast != null && skewLast > 140) bits.push(`El SKEW (${skewLast}) sigue en zona alta — cobertura de cola algo cara, aunque con solo unos meses de histórico esto aún no tiene z-score fiable.`);
+
+      bits.push(`<i>Esto es una lectura automática basada en reglas simples sobre los datos de hoy — no es una señal validada de tu harness IC/walk-forward, solo contexto para tu propia lectura.</i>`);
+
+      document.getElementById('inst-interpretacion').innerHTML = bits.join(' ');
+    })();
+
+    // --- Chart 1: precio vs flujos ---
+    const chFlow = new Chart(document.getElementById('chFlow'), {
+      type:'bar',
+      data:{
+        labels: D.dates,
+        datasets:[
+          {type:'bar', label:'Flujo diario (USD)', data:D.flow_usd, backgroundColor:D.flow_usd.map(v=>v>=0?'rgba(13,148,136,.55)':'rgba(192,57,43,.55)'), yAxisID:'y1', order:2, barPercentage:1, categoryPercentage:1},
+          {type:'line', label:'Flujo acumulado 60d (USD)', data:D.flow_usd_60d, borderColor:COLORS.flow20, backgroundColor:'transparent', yAxisID:'y1', pointRadius:0, borderWidth:1.4, order:1},
+          {type:'line', label:'Precio QQQ', data:D.price, borderColor:COLORS.price, backgroundColor:'transparent', yAxisID:'y2', pointRadius:0, borderWidth:1.6, order:0},
+        ]
+      },
+      options: baseOpts({
+        scales:{
+          x:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), maxTicksLimit:8}},
+          y1:{position:'left', grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), callback:v=>(v/1e9).toFixed(1)+'B'}},
+          y2:{position:'right', grid:{display:false}, ticks:{color:THEME_TICK()}}
+        }
+      })
+    });
+    regInst(chFlow, [D.flow_usd, D.flow_usd_60d, D.price]);
+    buildLegend('legend-flow', ['Flujo diario (verde=entrada, rojo=salida)','Flujo acum. 60d','Precio QQQ'], [COLORS.flow, COLORS.flow20, COLORS.price]);
+
+    // --- Chart 2: COT vs precio ---
+    const chCot = new Chart(document.getElementById('chCot'), {
+      type:'line',
+      data:{
+        labels: D.dates,
+        datasets:[
+          {label:'Asset Managers (neto)', data:D.am_net, borderColor:COLORS.am, backgroundColor:'transparent', yAxisID:'y1', pointRadius:0, borderWidth:1.6, stepped:true},
+          {label:'Leveraged Money (neto)', data:D.lev_net, borderColor:COLORS.lev, backgroundColor:'transparent', yAxisID:'y1', pointRadius:0, borderWidth:1.6, stepped:true},
+          {label:'Precio QQQ', data:D.price, borderColor:COLORS.price, backgroundColor:'transparent', yAxisID:'y2', pointRadius:0, borderWidth:1.2},
+        ]
+      },
+      options: baseOpts({
+        scales:{
+          x:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), maxTicksLimit:8}},
+          y1:{position:'left', grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK()}},
+          y2:{position:'right', grid:{display:false}, ticks:{color:THEME_TICK()}}
+        }
+      })
+    });
+    regInst(chCot, [D.am_net, D.lev_net, D.price]);
+    buildLegend('legend-cot', ['Asset Managers (neto, contratos)','Leveraged Money (neto, contratos)','Precio QQQ'], [COLORS.am, COLORS.lev, COLORS.price]);
+
+    // --- Chart 3: complejo de volatilidad ---
+    const chVol = new Chart(document.getElementById('chVol'), {
+      type:'line',
+      data:{
+        labels: D.dates,
+        datasets:[
+          {label:'VIX', data:D.vix, borderColor:COLORS.vix, backgroundColor:'transparent', pointRadius:0, borderWidth:1.4},
+          {label:'VIX9D', data:D.vix9d, borderColor:COLORS.vix9d, backgroundColor:'transparent', pointRadius:0, borderWidth:1.2},
+          {label:'VIX3M', data:D.vix3m, borderColor:COLORS.vix3m, backgroundColor:'transparent', pointRadius:0, borderWidth:1.2},
+          {label:'VVIX', data:D.vvix, borderColor:COLORS.vvix, backgroundColor:'transparent', pointRadius:0, borderWidth:1.2, yAxisID:'y2'},
+        ]
+      },
+      options: baseOpts({
+        scales:{
+          x:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), maxTicksLimit:8}},
+          y:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK()}},
+          y2:{position:'right', grid:{display:false}, ticks:{color:THEME_TICK()}}
+        }
+      })
+    });
+    regInst(chVol, [D.vix, D.vix9d, D.vix3m, D.vvix]);
+    buildLegend('legend-vol', ['VIX (30d)','VIX9D (corto plazo)','VIX3M (medio plazo)','VVIX (eje der.)'], [COLORS.vix, COLORS.vix9d, COLORS.vix3m, COLORS.vvix]);
+
+    // --- Chart 4: PCR + SKEW ---
+    const chSent = new Chart(document.getElementById('chSent'), {
+      type:'line',
+      data:{
+        labels: D.dates,
+        datasets:[
+          {label:'Put/Call Ratio (equity)', data:D.pcr_equity, borderColor:COLORS.pcr, backgroundColor:'transparent', pointRadius:0, borderWidth:1.4},
+          {label:'CBOE SKEW', data:D.skew, borderColor:COLORS.skew, backgroundColor:'transparent', pointRadius:0, borderWidth:1.4, yAxisID:'y2'},
+        ]
+      },
+      options: baseOpts({
+        scales:{
+          x:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), maxTicksLimit:8}},
+          y:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK()}},
+          y2:{position:'right', grid:{display:false}, ticks:{color:THEME_TICK()}, suggestedMin:110, suggestedMax:160}
+        }
+      })
+    });
+    regInst(chSent, [D.pcr_equity, D.skew]);
+    buildLegend('legend-sent', ['Put/Call Ratio equity (eje izq.)','CBOE SKEW (eje der.)'], [COLORS.pcr, COLORS.skew]);
+
+    // --- selector de rango temporal (1A/5A/10A/20A/Todo) ---
+    document.querySelectorAll('#tf-inst button[data-y]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        document.querySelectorAll('#tf-inst button[data-y]').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+        applyInstRange(+b.dataset.y, D.dates);
+      });
+    });
+
+    // --- Chart 5: GEX profile ---
+    if (D.gex && D.gex.by_strike && D.gex.by_strike.length){
+      const bs = D.gex.by_strike.slice().sort((a,b)=>a.Strike-b.Strike);
+      new Chart(document.getElementById('chGex'), {
+        type:'bar',
+        data:{
+          labels: bs.map(r=>r.Strike),
+          datasets:[
+            {label:'Call GEX', data:bs.map(r=>r.call_gex), backgroundColor:'rgba(13,148,136,.7)'},
+            {label:'Put GEX', data:bs.map(r=>r.put_gex), backgroundColor:'rgba(192,57,43,.7)'},
+          ]
+        },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          scales:{
+            x:{grid:{display:false}, ticks:{color:THEME_TICK(), maxTicksLimit:20}, stacked:true},
+            y:{grid:{color:THEME_LINE()}, ticks:{color:THEME_TICK(), callback:v=>(v/1e6).toFixed(0)+'M'}, stacked:true}
+          },
+          plugins:{legend:{display:false}}
+        }
+      });
+      buildLegend('legend-gex', ['Call GEX (por strike)','Put GEX (por strike)'], [COLORS.callgex, COLORS.putgex]);
+      document.getElementById('gex-note').textContent =
+        `Spot ${g.spot.toFixed(1)} · Call wall ${g.call_wall_strike} (OI ${g.call_wall_oi.toLocaleString()}) · `+
+        `Put wall ${g.put_wall_strike} (OI ${g.put_wall_oi.toLocaleString()}) · GEX neto ≤45d: `+
+        `${(g.net_gex_45d/1e9).toFixed(2)}B por 1% de movimiento. `+
+        `Convención: dealer largo gamma en calls vendidas, corto en puts vendidas (aproximación estándar, no exacta).`;
+    }
+  };
+
+  function buildLegend(id, labels, colors){
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '<ul>' + labels.map((l,i)=>
+      `<li><span class="dot" style="background:${colors[i]}"></span>${l}</li>`
+    ).join('') + '</ul>';
+  }
 })();
 </script>
 

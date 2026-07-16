@@ -154,6 +154,25 @@
   #view-estudio .efocus{font-size:12px;color:var(--muted)}
   #view-estudio .efocus b{color:var(--accent)}
   #view-estudio .emeta{margin-left:auto;color:var(--muted);font-size:12px;font-family:var(--mono)}
+  #view-estudio .espot{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--muted);
+    padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+  #view-estudio .espot.up{color:#16a34a;border-color:#16a34a}
+  #view-estudio .espot.down{color:#dc2626;border-color:#dc2626}
+  #view-estudio button.ecandle.on{background:var(--solid);border-color:var(--solid);color:var(--solid-text)}
+
+  #edrawmenu{position:fixed;z-index:10000;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow);padding:10px;min-width:190px;font-size:12.5px}
+  #edrawmenu .emrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  #edrawmenu .emrow:last-child{margin-bottom:0}
+  #edrawmenu .emlabel{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+    width:100%;margin-bottom:2px}
+  #edrawmenu .eswatch{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+    flex:0 0 auto}
+  #edrawmenu .eswatch.sel{border-color:var(--ink)}
+  #edrawmenu input[type="range"]{width:100%}
+  #edrawmenu button.edel{width:100%;background:var(--baj-soft);color:var(--baj);border:1px solid var(--baj);
+    border-radius:7px;padding:6px;font:inherit;font-weight:600;cursor:pointer}
+  #edrawmenu button.edel:hover{background:var(--baj);color:#fff}
 
   #view-estudio .etoolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
     background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -308,10 +327,16 @@
     <div class="etop">
       <select class="eserie" id="eserie"></select>
       <span class="efocus">Panel enfocado: <b id="efocusLbl">Diario</b></span>
+      <span class="espot" id="espot" title="Precio spot (best-effort, cliente)"></span>
       <span class="emeta" id="emeta"></span>
     </div>
 
     <div class="etoolbar">
+      <div class="egrp">
+        <span class="elabel">Vela</span>
+        <button class="etg ecandle on" data-candle="normal">Normal</button>
+        <button class="etg ecandle" data-candle="heikin">Heikin Ashi</button>
+      </div>
       <div class="egrp">
         <span class="elabel">Medias</span>
         <button class="etg eind" data-ind="EMA" data-pane="main">EMA</button>
@@ -334,11 +359,10 @@
       <div class="egrp">
         <span class="elabel">Dibujo</span>
         <button class="etg edraw" data-draw="segment">Tendencia</button>
-        <button class="etg edraw" data-draw="rect">Rectángulo</button>
+        <button class="etg edraw" data-draw="areaBox">Rectángulo</button>
         <button class="etg edraw" data-draw="fibonacciLine">Fibonacci</button>
         <button class="etg edraw" data-draw="horizontalStraightLine">Horizontal</button>
-        <button class="etg" id="eclearPane" title="Borrar dibujos del panel enfocado">Borrar panel</button>
-        <button class="etg" id="eclearAll" title="Borrar dibujos de esta serie">Borrar todo</button>
+        <button class="etg" id="eclearAll" title="Borrar todos los dibujos de esta serie">Borrar dibujos</button>
       </div>
       <div class="egrp">
         <span class="elabel">Distribución</span>
@@ -350,15 +374,18 @@
 
     <div id="egrid" data-layout="quad"></div>
     <div id="emaxbackdrop"></div>
+    <div id="edrawmenu" hidden></div>
 
     <p class="enote">
       Indicadores a los paneles visibles; dibujo al panel enfocado (clic para enfocar) y
-      <b>persistente</b> (se guarda por serie y temporalidad, sobrevive al refresco). El
-      <b>⛶</b> de cada panel lo lleva a pantalla completa (mismo botón o Esc para volver).
-      El crosshair está <b>sincronizado</b>: al señalar un punto se marca la misma fecha en el resto.
+      <b>persistente</b> (se guarda por serie, compartido entre las 4 temporalidades, y
+      sobrevive al refresco). Clic derecho sobre un dibujo para <b>cambiar color/grosor o
+      borrar solo ese trazo</b>. El <b>⛶</b> de cada panel lo lleva a pantalla completa
+      (mismo botón o Esc para volver). El crosshair está <b>sincronizado</b> entre los 4 paneles.
       <span id="enote4h"></span>
     </p>
   </div>
+
 
 </div>
 
@@ -728,6 +755,8 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   const getCOMPS = () => { try { return COMPS; } catch(e){ return []; } };
   const kCssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+  const uid = () => 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
   // ---------- overlay custom: línea de sincronización de crosshair ----------
   kc.registerOverlay({
     name:'crossSync', totalStep:1, lock:true,
@@ -738,6 +767,21 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       return [{ type:'line',
         attrs:{ coordinates:[{x,y:0},{x,y:bounding.height}] },
         styles:{ style:'dashed', color:kCssVar('--accent') || '#0d9488', size:1, dashedValue:[4,3] } }];
+    }
+  });
+
+  // ---------- overlay custom: rectángulo ("área de decisión") ----------
+  // KLineChart v9 no trae un overlay de rectángulo de fábrica (solo la figura
+  // primitiva 'rect', usada internamente por otros elementos); se registra
+  // aquí como overlay de 2 puntos con relleno translúcido + borde.
+  kc.registerOverlay({
+    name:'areaBox', totalStep:3,
+    needDefaultPointFigure:true, needDefaultXAxisFigure:false, needDefaultYAxisFigure:false,
+    createPointFigures:({coordinates})=>{
+      if(coordinates.length<2) return [];
+      const x=Math.min(coordinates[0].x,coordinates[1].x), y=Math.min(coordinates[0].y,coordinates[1].y);
+      const w=Math.abs(coordinates[1].x-coordinates[0].x), h=Math.abs(coordinates[1].y-coordinates[0].y);
+      return [{ type:'rect', attrs:{x,y,width:w,height:h} }];
     }
   });
 
@@ -796,7 +840,11 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       yAxis:{ axisLine:{ color:kCssVar('--k-axis') }, tickLine:{ color:kCssVar('--k-axis') }, tickText:{ color:kCssVar('--k-tick') } },
       separator:{ color:kCssVar('--k-axis'), size:1 },
       crosshair:{ horizontal:{ line:{ color:kCssVar('--k-cross-line') }, text:{ backgroundColor:kCssVar('--k-cross-bg'), color:kCssVar('--k-cross-text') } },
-                  vertical:{ line:{ color:kCssVar('--k-cross-line') }, text:{ backgroundColor:kCssVar('--k-cross-bg'), color:kCssVar('--k-cross-text') } } }
+                  vertical:{ line:{ color:kCssVar('--k-cross-line') }, text:{ backgroundColor:kCssVar('--k-cross-bg'), color:kCssVar('--k-cross-text') } } },
+      overlay:{
+        line:{ color:kCssVar('--accent')||'#0d9488', size:1.6 },
+        rect:{ style:'stroke_fill', color:'rgba(13,148,136,.15)', borderColor:kCssVar('--accent')||'#0d9488', borderSize:1.6 }
+      }
     };
   }
 
@@ -805,11 +853,12 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} },
   };
 
-  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2;
-  const slots=[];                 // {i,el,chart,sel,empty,tf,key,ov,syncId,maxBtn}
+  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2, candleMode='normal';
+  const slots=[];                 // {i,el,chart,sel,empty,tf,hasData,ov:{uid:true},subIds,syncId,maxBtn}
   const activeMain=new Set(), activeSub=new Set();
   let SERIES={};
   let syncing=false, rafPending=false, pendingTs=undefined, srcSlot=null;
+  let DRAWS={};                   // uid -> {name, points, styles?} — compartido entre las 4 temporalidades
 
   const periods = () => $('eperiods').value.split(',').map(s=>parseInt(s.trim(),10)).filter(n=>n>0);
   const calc = name =>
@@ -818,30 +867,178 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     : name==='KDJ'? [9,3,3] : name==='WR'? [6,10] : undefined;
 
   const visibleSlots = () => VISIBLE[layout].map(i=>slots[i]).filter(Boolean);
+  const drawKey = () => `estudio:${serieKey}`;
 
-  // ---------- persistencia de dibujos ----------
-  function record(slot,o){
-    if(!o||!o.id) return;
-    slot.ov[o.id]={name:o.name, points:(o.points||[]).map(p=>({timestamp:p.timestamp,value:p.value,dataIndex:p.dataIndex}))};
-    if(slot.key) store.set(slot.key, Object.values(slot.ov));
+  // ---------- persistencia + réplica de dibujos entre los 4 paneles ----------
+  const cleanPts = pts => (pts||[]).map(p=>({timestamp:p.timestamp, value:p.value}));
+  function saveDraws(){ store.set(drawKey(), Object.entries(DRAWS).map(([id,d])=>Object.assign({id},d))); }
+  function hexToRgba(hex, alpha){
+    hex = (hex||'#0d9488').replace('#','');
+    if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const r=parseInt(hex.slice(0,2),16), g=parseInt(hex.slice(2,4),16), b=parseInt(hex.slice(4,6),16);
+    const a = alpha==null? 1 : alpha;
+    return `rgba(${r},${g},${b},${a})`;
   }
-  function forget(slot,id){ delete slot.ov[id]; if(slot.key) store.set(slot.key, Object.values(slot.ov)); }
-  function drawTpl(slot,name,points){
-    return { name, points, groupId:'draw',
-      onDrawEnd:({overlay})=>{ record(slot,overlay); return false; },
-      onPressedMoveEnd:({overlay})=>{ record(slot,overlay); return false; },
-      onRemoved:({overlay})=>{ forget(slot,overlay.id); return false; } };
-  }
-  function reloadOverlays(slot){
-    slot.chart.removeOverlay();               // limpia dibujos + syncline
-    slot.ov={};
-    if(slot.key) for(const o of store.get(slot.key)){
-      const id=slot.chart.createOverlay(drawTpl(slot,o.name,o.points));
-      if(id) slot.ov[id]={name:o.name, points:o.points};
+  function styleOverride(name, s){
+    const color = s.color || '#0d9488';
+    const size = s.size!=null ? s.size : 1.6;
+    if(name==='areaBox'){
+      const alpha = s.alpha!=null ? s.alpha : 0.15;
+      return { rect:{ color:hexToRgba(color, alpha), borderColor:color, borderSize:size } };
     }
-    // recrea la línea de sync (invisible hasta que llegue un crosshair)
+    const alpha = s.alpha!=null ? s.alpha : 1;
+    return { line:{ color:hexToRgba(color, alpha), size } };
+  }
+
+  function createOnAllSlots(id, name, points, styles, exceptSlot){
+    slots.forEach(s=>{
+      if(s===exceptSlot || !s.hasData || s.ov[id]) return;
+      const tpl2 = drawTpl(s, name, points, id);
+      if(styles) tpl2.styles = styleOverride(name, styles);
+      const created = s.chart.createOverlay(tpl2);
+      if(created){ s.ov[id]=true; ensureOverlayVisible(s, id); }
+    });
+  }
+  function updatePointsOnAllSlots(id, points, exceptSlot){
+    slots.forEach(s=>{ if(s===exceptSlot || !s.ov[id]) return; s.chart.overrideOverlay({id, points}); });
+  }
+  function restyleOnAllSlots(id, name, styles){
+    slots.forEach(s=>{ if(!s.ov[id]) return; s.chart.overrideOverlay({id, styles:styleOverride(name,styles)}); });
+  }
+  function removeFromAllSlots(id, exceptSlot){
+    slots.forEach(s=>{ if(s===exceptSlot || !s.ov[id]) return; s.chart.removeOverlay({id}); delete s.ov[id]; });
+  }
+
+  // ---------- asegura que el dibujo cae dentro de la ventana visible ----------
+  // Los 4 paneles comparten fecha/valor, pero cada uno tiene su propio zoom y
+  // scroll. Un panel con miles de velas (Diario, 4H) no muestra por defecto
+  // todo el histórico, así que un trazo dibujado con fechas antiguas puede
+  // quedar fuera de la ventana visible (aunque los datos sean correctos) y
+  // parecer "desplazado" o "no aparece". Se corrige encuadrando la vista.
+  // búsqueda binaria del índice de vela más cercano a un timestamp (mismo
+  // criterio que usa KLineChart internamente para overlays, pero calculado
+  // aquí para no depender de si el overlay ya resolvió su propio dataIndex)
+  function nearestIndex(dataList, ts){
+    let lo=0, hi=dataList.length-1;
+    if(hi<0) return 0;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(dataList[mid].timestamp<ts) lo=mid+1; else hi=mid; }
+    return lo;
+  }
+  function ensureOverlayVisible(slot, id){
+    const o = slot.chart.getOverlayById(id);
+    if(!o || !o.points || !o.points.length) return;
+    const dataList = slot.chart.getDataList();
+    if(!dataList || !dataList.length) return;
+    const tss = o.points.map(p=>p.timestamp).filter(t=>t!=null);
+    if(!tss.length) return;
+    const idxs = tss.map(ts=>nearestIndex(dataList, ts));
+    const minI=Math.min(...idxs), maxI=Math.max(...idxs);
+    const vis = slot.chart.getVisibleRange();
+    if(minI>=vis.from && maxI<=vis.to) return;   // ya visible, no tocar nada
+    const span=Math.max(1,maxI-minI), visSpan=Math.max(1,vis.to-vis.from);
+    if(span>visSpan){
+      const bs=slot.chart.getBarSpace();
+      slot.chart.setBarSpace(Math.max(0.3, bs*(visSpan/span)*0.85));   // deja ~15% margen
+    }
+    slot.chart.scrollToDataIndex(Math.round((minI+maxI)/2), 0);
+  }
+
+  function drawTpl(slot, name, points, id){
+    const tpl = { name, points, groupId:'draw' };
+    if(id) tpl.id = id;
+    tpl.onDrawEnd = ({overlay})=>{
+      DRAWS[overlay.id] = { name:overlay.name, points:cleanPts(overlay.points) };
+      saveDraws();
+      slot.ov[overlay.id]=true;
+      createOnAllSlots(overlay.id, overlay.name, DRAWS[overlay.id].points, DRAWS[overlay.id].styles, slot);
+      const btn=document.querySelector('#view-estudio button.edraw.on'); if(btn) btn.classList.remove('on');
+      return false;
+    };
+    tpl.onPressedMoveEnd = ({overlay})=>{
+      if(!DRAWS[overlay.id]) DRAWS[overlay.id]={name:overlay.name};
+      DRAWS[overlay.id].points = cleanPts(overlay.points);
+      saveDraws();
+      updatePointsOnAllSlots(overlay.id, DRAWS[overlay.id].points, slot);
+      return false;
+    };
+    tpl.onRemoved = ({overlay})=>{
+      if(slot.suppressRemove) return false;   // limpieza interna de reloadOverlays, no un borrado real del usuario
+      delete DRAWS[overlay.id]; saveDraws();
+      delete slot.ov[overlay.id];
+      removeFromAllSlots(overlay.id, slot);
+      closeDrawMenu();
+      return false;
+    };
+    tpl.onRightClick = (evt)=>{
+      if(evt && evt.preventDefault) evt.preventDefault();
+      openDrawMenu(evt.overlay, evt);
+      return true;
+    };
+    return tpl;
+  }
+
+  function reloadOverlays(slot){
+    slot.suppressRemove = true;
+    slot.chart.removeOverlay();               // limpia dibujos + syncline de ESTE panel
+    slot.suppressRemove = false;
+    slot.ov={};
+    Object.entries(DRAWS).forEach(([id,d])=>{
+      const tpl = drawTpl(slot, d.name, d.points, id);
+      if(d.styles) tpl.styles = styleOverride(d.name, d.styles);
+      const created = slot.chart.createOverlay(tpl);
+      if(created){ slot.ov[id]=true; ensureOverlayVisible(slot, id); }
+    });
     slot.syncId=slot.chart.createOverlay({name:'crossSync', points:[{timestamp:0,value:0}], visible:false, lock:true});
   }
+
+  // ---------- menú contextual (clic derecho sobre un dibujo) ----------
+  const PALETTE = ['#0d9488','#dc2626','#2563eb','#16a34a','#8b5cf6','#f59e0b','#16181d'];
+  function closeDrawMenu(){ const m=$('edrawmenu'); m.hidden=true; m.innerHTML=''; }
+  function openDrawMenu(overlay, evt){
+    const menu=$('edrawmenu');
+    const rec = DRAWS[overlay.id] || {name:overlay.name, points:cleanPts(overlay.points)};
+    const isBox = rec.name==='areaBox';
+    const curColor = (rec.styles && rec.styles.color) || kCssVar('--accent') || '#0d9488';
+    const curSize  = (rec.styles && rec.styles.size) != null ? rec.styles.size : 1.6;
+    const curAlpha = (rec.styles && rec.styles.alpha) != null ? rec.styles.alpha : (isBox ? 0.15 : 1);
+    const swatches = PALETTE.map(c=>`<span class="eswatch${c.toLowerCase()===curColor.toLowerCase()?' sel':''}" data-c="${c}" style="background:${c}"></span>`).join('');
+    menu.innerHTML = `
+      <div class="emrow"><span class="emlabel">Color</span></div>
+      <div class="emrow">${swatches}</div>
+      <div class="emrow"><span class="emlabel">Grosor</span></div>
+      <div class="emrow"><input type="range" id="ethick" min="1" max="6" step="0.5" value="${curSize}"></div>
+      <div class="emrow"><span class="emlabel">Transparencia${isBox?' (relleno)':''}</span></div>
+      <div class="emrow"><input type="range" id="ealpha" min="0" max="100" step="5" value="${Math.round(curAlpha*100)}"></div>
+      <div class="emrow"><button class="edel">Eliminar este dibujo</button></div>`;
+    menu.hidden=false;
+    const pad=8, mw=210, mh=220;
+    let left = (evt.pageX||0)+pad, top=(evt.pageY||0)+pad;
+    if(left+mw > window.innerWidth) left = (evt.pageX||0)-mw-pad;
+    if(top+mh > window.innerHeight) top = (evt.pageY||0)-mh-pad;
+    menu.style.left = left+'px'; menu.style.top = top+'px';
+
+    function apply(patch){
+      rec.styles = Object.assign({color:curColor, size:curSize, alpha:curAlpha}, rec.styles, patch);
+      DRAWS[overlay.id]=rec; saveDraws();
+      restyleOnAllSlots(overlay.id, rec.name, rec.styles);
+    }
+    menu.querySelectorAll('.eswatch').forEach(sw=>{
+      sw.addEventListener('click', ()=>{
+        apply({color:sw.dataset.c});
+        menu.querySelectorAll('.eswatch').forEach(s2=>s2.classList.remove('sel'));
+        sw.classList.add('sel');
+      });
+    });
+    menu.querySelector('#ethick').addEventListener('input', (e)=> apply({size:parseFloat(e.target.value)}));
+    menu.querySelector('#ealpha').addEventListener('input', (e)=> apply({alpha:parseInt(e.target.value,10)/100}));
+    menu.querySelector('.edel').addEventListener('click', ()=>{
+      removeFromAllSlots(overlay.id, null);
+      delete DRAWS[overlay.id]; saveDraws();
+      closeDrawMenu();
+    });
+  }
+  document.addEventListener('click', (e)=>{ if(!e.target.closest('#edrawmenu')) closeDrawMenu(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawMenu(); });
 
   // ---------- series (precios.json + equity en memoria) ----------
   const tsOf = f => Date.parse(f+'T00:00:00Z');
@@ -861,22 +1058,39 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     }
   }
 
+  // ---------- Heikin Ashi (transformación cliente, solo visual) ----------
+  function toHeikinAshi(data){
+    let prevO=null, prevC=null;
+    return data.map(d=>{
+      const c=(d.open+d.high+d.low+d.close)/4;
+      const o=prevO==null? (d.open+d.close)/2 : (prevO+prevC)/2;
+      const h=Math.max(d.high,o,c), l=Math.min(d.low,o,c);
+      prevO=o; prevC=c;
+      return {timestamp:d.timestamp, open:o, high:h, low:l, close:c, volume:d.volume};
+    });
+  }
+
   // ---------- render de un slot ----------
+  function loadDrawsForSerie(){
+    DRAWS={};
+    store.get(drawKey()).forEach(d=>{ DRAWS[d.id]={name:d.name, points:d.points, styles:d.styles}; });
+  }
   function renderSlot(slot){
     const s=SERIES[serieKey]; if(!s) return;
     const line=s.tipo==='line';
     const rows=s.tf[slot.tf];
-    if(!rows||!rows.length){ slot.empty.style.display='flex'; slot.chart.applyNewData([]); slot.key=null; return; }
+    if(!rows||!rows.length){ slot.empty.style.display='flex'; slot.chart.applyNewData([]); slot.hasData=false; slot.ov={}; return; }
     slot.empty.style.display='none';
-    const data = line
+    let data = line
       ? rows.map(r=>({timestamp:r[0], open:r[1], high:r[1], low:r[1], close:r[1], volume:0}))
       : rows.map(r=>({timestamp:r[0], open:r[1], high:r[2], low:r[3], close:r[4], volume:r[5]||0}));
+    if(!line && candleMode==='heikin') data = toHeikinAshi(data);
     slot.chart.setStyles({ candle:{ type: line?'area':'candle_solid' } });
     slot.chart.applyNewData(data);
-    slot.key=`estudio:${serieKey}:${slot.tf}`;
+    slot.hasData=true;
     reloadOverlays(slot);
   }
-  const renderAll = () => slots.forEach(renderSlot);
+  function renderAll(){ loadDrawsForSerie(); slots.forEach(renderSlot); }
 
   // ---------- indicadores (a todos los slots) ----------
   const addMain = name => slots.forEach(s=>{ const p=calc(name); s.chart.createIndicator(p?{name,calcParams:p}:name, true, {id:'candle_pane'}); });
@@ -919,7 +1133,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       grid.appendChild(el);
       const chart=kc.init('ech'+i, { styles: buildStyles() });
       const slot={i, el, chart, sel:el.querySelector('.etfsel'), empty, tf:DEFAULT_TF[i],
-                  key:null, ov:{}, subIds:{}, syncId:null, maxBtn:el.querySelector('.emax')};
+                  hasData:false, ov:{}, subIds:{}, syncId:null, maxBtn:el.querySelector('.emax')};
       slots.push(slot);
       slot.sel.addEventListener('change', ()=>{ slot.tf=slot.sel.value; renderSlot(slot); });
       slot.maxBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleMax(slot); });
@@ -957,6 +1171,15 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
 
   // ---------- toolbar ----------
   function wireToolbar(){
+    document.querySelectorAll('#view-estudio button.ecandle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(btn.classList.contains('on')) return;
+        document.querySelectorAll('#view-estudio button.ecandle').forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+        candleMode = btn.dataset.candle==='heikin' ? 'heikin' : 'normal';
+        slots.forEach(renderSlot);
+      });
+    });
     document.querySelectorAll('#view-estudio button.eind').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const name=btn.dataset.ind, main=btn.dataset.pane==='main', on=btn.classList.toggle('on');
@@ -974,24 +1197,19 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
         const wasOn=btn.classList.contains('on');
         document.querySelectorAll('#view-estudio button.edraw').forEach(b=>b.classList.remove('on'));
         if(wasOn) return;
-        if(!VISIBLE[layout].includes(focusSlot) || !slots[focusSlot].key){
-          const s=visibleSlots().find(s=>s.key); if(s) setFocus(s.i);
+        if(!VISIBLE[layout].includes(focusSlot) || !slots[focusSlot].hasData){
+          const s=visibleSlots().find(s=>s.hasData); if(s) setFocus(s.i);
         }
         const fs=slots[focusSlot];
-        if(!fs || !fs.key) return;
+        if(!fs || !fs.hasData) return;
         btn.classList.add('on');
-        fs.chart.createOverlay({ name:btn.dataset.draw, groupId:'draw',
-          onDrawEnd:({overlay})=>{ record(fs,overlay); btn.classList.remove('on'); return false; },
-          onPressedMoveEnd:({overlay})=>{ record(fs,overlay); return false; },
-          onRemoved:({overlay})=>{ forget(fs,overlay.id); return false; } });
+        fs.chart.createOverlay(drawTpl(fs, btn.dataset.draw, undefined, uid()));
       });
     });
-    $('eclearPane').addEventListener('click', ()=>{ const p=slots[focusSlot]; if(!p||!p.key) return;
-      p.chart.removeOverlay(); p.ov={}; store.set(p.key,[]);
-      p.syncId=p.chart.createOverlay({name:'crossSync', points:[{timestamp:0,value:0}], visible:false, lock:true}); });
-    $('eclearAll').addEventListener('click', ()=>{ slots.forEach(p=>{ if(!p.key) return;
-      p.chart.removeOverlay(); p.ov={}; store.set(p.key,[]);
-      p.syncId=p.chart.createOverlay({name:'crossSync', points:[{timestamp:0,value:0}], visible:false, lock:true}); }); });
+    $('eclearAll').addEventListener('click', ()=>{
+      Object.keys(DRAWS).forEach(id=>removeFromAllSlots(id, null));
+      DRAWS={}; saveDraws();
+    });
     document.querySelectorAll('#view-estudio button.elayout').forEach(btn=>{
       btn.addEventListener('click', ()=>setLayout(btn.dataset.layout));
     });
@@ -1011,6 +1229,33 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     const t0=Date.now();
     (function poll(){ if(test()||Date.now()-t0>ms) return res(); setTimeout(poll,180); })();
   });
+
+  // ---------- precio spot (best-effort, cliente, sin backend) ----------
+  // Usa el endpoint CSV público de Stooq sobre QQQ (proxy del Nasdaq-100,
+  // igual que el 4H) porque es de acceso libre desde el navegador sin clave.
+  // Si el navegador del usuario bloquea el origen (CORS/red), se desactiva
+  // en silencio: nunca rompe la pestaña ni muestra un error visible.
+  let spotTimer=null;
+  async function pollSpot(){
+    try{
+      const r = await fetch('https://stooq.com/q/l/?s=qqq.us&f=sd2t2c&h&e=csv', {cache:'no-store'});
+      if(!r.ok) throw 0;
+      const txt = await r.text();
+      const cols = txt.trim().split('\n').slice(1)[0]?.split(',');
+      const price = cols && parseFloat(cols[3]);
+      const el = $('espot');
+      if(!isFinite(price)){ el.textContent=''; return; }
+      const prev = parseFloat(el.dataset.prev||price);
+      el.textContent = 'QQQ spot ' + price.toFixed(2);
+      el.classList.toggle('up', price>prev); el.classList.toggle('down', price<prev);
+      el.dataset.prev = price;
+    }catch(e){
+      $('espot').textContent='';   // fallo de red/CORS: se oculta, no se rompe nada
+      if(spotTimer){ clearInterval(spotTimer); spotTimer=null; }
+    }
+  }
+  function startSpot(){ if(spotTimer) return; pollSpot(); spotTimer=setInterval(pollSpot, 30000); }
+  function stopSpot(){ if(spotTimer){ clearInterval(spotTimer); spotTimer=null; } }
 
   async function initEstudio(){
     if(inited) return; inited=true;
@@ -1037,7 +1282,8 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     const est=t==='estudio';
     $('tab-estudio').classList.toggle('on', est); $('tab-panel').classList.toggle('on', !est);
     $('view-panel').hidden=est; $('view-estudio').hidden=!est;
-    if(est) requestAnimationFrame(()=> initEstudio().then(()=> slots.forEach(s=>s.chart.resize())));
+    if(est){ requestAnimationFrame(()=> initEstudio().then(()=> slots.forEach(s=>s.chart.resize()))); startSpot(); }
+    else stopSpot();
   }
   $('tab-panel').addEventListener('click', ()=>setTab('panel'));
   $('tab-estudio').addEventListener('click', ()=>setTab('estudio'));

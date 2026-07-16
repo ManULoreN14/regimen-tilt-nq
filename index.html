@@ -357,6 +357,10 @@
         <button class="etg eind" data-ind="VOL_PROFILE" data-pane="main">Volume Profile</button>
       </div>
       <div class="egrp">
+        <span class="elabel">Patrones</span>
+        <button class="etg" id="epatBtn" title="Marca velas y figuras detectadas (solo observación, no es señal del sistema)">Mostrar patrones</button>
+      </div>
+      <div class="egrp">
         <span class="elabel">Dibujo</span>
         <button class="etg edraw" data-draw="segment">Tendencia</button>
         <button class="etg edraw" data-draw="areaBox">Rectángulo</button>
@@ -383,6 +387,8 @@
       borrar solo ese trazo</b>. El <b>⛶</b> de cada panel lo lleva a pantalla completa
       (mismo botón o Esc para volver). El crosshair está <b>sincronizado</b> entre los 4 paneles.
       <span id="enote4h"></span>
+      <b>Patrones</b>: son heurísticos y aproximados (como cualquier escáner técnico) — sirven
+      para tu inspección visual y <b>nunca alimentan el sistema cuantitativo</b>.
     </p>
   </div>
 
@@ -757,6 +763,28 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
 
   const uid = () => 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 
+  // ---------- overlay custom: contorno de patrón gráfico (solo lectura) ----------
+  // Une los puntos de swing de un patrón (H-C-H, doble techo, triángulo...)
+  // con una polilínea discontinua + etiqueta de texto. Nunca es interactivo
+  // (lock:true): es una anotación derivada de los datos, no un dibujo del
+  // usuario, y vive en un espacio de ids totalmente separado (groupId:'patron').
+  kc.registerOverlay({
+    name:'patronLinea', totalStep:99, lock:true,
+    needDefaultPointFigure:false, needDefaultXAxisFigure:false, needDefaultYAxisFigure:false,
+    createPointFigures:({coordinates, overlay})=>{
+      if(coordinates.length<2) return [];
+      const figs=[{ type:'line', attrs:{coordinates},
+        styles:{ color:'#f59e0b', size:1.4, style:'dashed', dashedValue:[5,3] } }];
+      if(overlay.extendData){
+        const last=coordinates[coordinates.length-1];
+        figs.push({ type:'text',
+          attrs:{ x:last.x, y:last.y-8, text:overlay.extendData, align:'center', baseline:'bottom' },
+          styles:{ color:'#f59e0b', size:11, weight:600 } });
+      }
+      return figs;
+    }
+  });
+
   // ---------- overlay custom: línea de sincronización de crosshair ----------
   kc.registerOverlay({
     name:'crossSync', totalStep:1, lock:true,
@@ -853,7 +881,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} },
   };
 
-  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2, candleMode='normal';
+  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2, candleMode='normal', patternsOn=false;
   const slots=[];                 // {i,el,chart,sel,empty,tf,hasData,ov:{uid:true},subIds,syncId,maxBtn}
   const activeMain=new Set(), activeSub=new Set();
   let SERIES={};
@@ -1070,6 +1098,41 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     });
   }
 
+  // ---------- capa de patrones (solo lectura, derivada de precios.json) ----------
+  function clearPatterns(slot){
+    (slot.patIds||[]).forEach(id=>slot.chart.removeOverlay({id}));
+    slot.patIds=[];
+  }
+  function renderPatterns(slot, rows){
+    clearPatterns(slot);
+    if(!patternsOn) return;
+    const s=SERIES[serieKey]; if(!s || !s.patrones) return;
+    const anot = s.patrones[slot.tf]; if(!anot || !anot.length) return;
+    const byTs = new Map(rows.map(r=>[r[0], r]));
+    anot.forEach(a=>{
+      if(a.clase==='vela'){
+        const row=byTs.get(a.t); if(!row) return;
+        const hi=row[2], lo=row[3], margin=(hi-lo)*0.2 || hi*0.002;
+        const v = a.lado==='arriba' ? hi+margin : lo-margin;
+        const id = slot.chart.createOverlay({ name:'simpleAnnotation', groupId:'patron', lock:true,
+          points:[{timestamp:a.t, value:v}], extendData:a.texto,
+          styles:{ line:{color:'#f59e0b'}, text:{color:'#f59e0b', size:10} } });
+        if(id) slot.patIds.push(id);
+      } else if(a.linea_superior && a.linea_inferior){
+        const id1 = slot.chart.createOverlay({ name:'patronLinea', groupId:'patron', lock:true,
+          points:a.linea_inferior.map(p=>({timestamp:p.t, value:p.v})), extendData:a.texto });
+        const id2 = slot.chart.createOverlay({ name:'patronLinea', groupId:'patron', lock:true,
+          points:a.linea_superior.map(p=>({timestamp:p.t, value:p.v})) });
+        if(id1) slot.patIds.push(id1);
+        if(id2) slot.patIds.push(id2);
+      } else if(a.puntos){
+        const id = slot.chart.createOverlay({ name:'patronLinea', groupId:'patron', lock:true,
+          points:a.puntos.map(p=>({timestamp:p.t, value:p.v})), extendData:a.texto });
+        if(id) slot.patIds.push(id);
+      }
+    });
+  }
+
   // ---------- render de un slot ----------
   function loadDrawsForSerie(){
     DRAWS={};
@@ -1079,7 +1142,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     const s=SERIES[serieKey]; if(!s) return;
     const line=s.tipo==='line';
     const rows=s.tf[slot.tf];
-    if(!rows||!rows.length){ slot.empty.style.display='flex'; slot.chart.applyNewData([]); slot.hasData=false; slot.ov={}; return; }
+    if(!rows||!rows.length){ slot.empty.style.display='flex'; slot.chart.applyNewData([]); slot.hasData=false; slot.ov={}; slot.patIds=[]; return; }
     slot.empty.style.display='none';
     let data = line
       ? rows.map(r=>({timestamp:r[0], open:r[1], high:r[1], low:r[1], close:r[1], volume:0}))
@@ -1089,6 +1152,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     slot.chart.applyNewData(data);
     slot.hasData=true;
     reloadOverlays(slot);
+    renderPatterns(slot, rows);
   }
   function renderAll(){ loadDrawsForSerie(); slots.forEach(renderSlot); }
 
@@ -1133,7 +1197,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       grid.appendChild(el);
       const chart=kc.init('ech'+i, { styles: buildStyles() });
       const slot={i, el, chart, sel:el.querySelector('.etfsel'), empty, tf:DEFAULT_TF[i],
-                  hasData:false, ov:{}, subIds:{}, syncId:null, maxBtn:el.querySelector('.emax')};
+                  hasData:false, ov:{}, patIds:[], subIds:{}, syncId:null, maxBtn:el.querySelector('.emax')};
       slots.push(slot);
       slot.sel.addEventListener('change', ()=>{ slot.tf=slot.sel.value; renderSlot(slot); });
       slot.maxBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleMax(slot); });
@@ -1171,6 +1235,11 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
 
   // ---------- toolbar ----------
   function wireToolbar(){
+    $('epatBtn').addEventListener('click', ()=>{
+      patternsOn = !patternsOn;
+      $('epatBtn').classList.toggle('on', patternsOn);
+      slots.forEach(s=>{ if(s.hasData) renderPatterns(s, SERIES[serieKey].tf[s.tf]); else clearPatterns(s); });
+    });
     document.querySelectorAll('#view-estudio button.ecandle').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         if(btn.classList.contains('on')) return;

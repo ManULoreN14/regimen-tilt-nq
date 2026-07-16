@@ -30,6 +30,11 @@ try:
 except Exception:
     yf = None
 
+try:
+    from patrones_tecnicos import detectar as _detectar_patrones
+except Exception:
+    _detectar_patrones = None
+
 BASE = Path(__file__).resolve().parent
 
 # Series de precio. Para intradía, un índice (^NDX) suele venir vacío en
@@ -114,7 +119,28 @@ def _serie(cfg):
                 _log(f"{cfg['key']}: 4H sin datos intradía (se omite)")
         except Exception as e:
             _log(f"{cfg['key']}: 4H falló ({e}) — se omite")
-    return {"nombre": cfg["nombre"], "tipo": "ohlc", "tf": tf} if tf else None
+    return {"nombre": cfg["nombre"], "tipo": "ohlc", "tf": tf,
+            "patrones": _patrones_por_tf(tf, cfg["key"])} if tf else None
+
+
+def _patrones_por_tf(tf_dict, key):
+    """Detección de patrones (vela + gráfico), SOLO para inspección visual en
+    el Estudio Técnico — nunca se usa como señal del sistema. Ver cabecera
+    de patrones_tecnicos.py para el porqué. Tolerante: si falla, se omite
+    esa temporalidad sin romper el resto del pipeline."""
+    if _detectar_patrones is None:
+        _log("patrones_tecnicos.py no disponible: se omiten anotaciones")
+        return {}
+    out = {}
+    for tf, rows in tf_dict.items():
+        try:
+            out[tf] = _detectar_patrones(rows)
+        except Exception as e:
+            _log(f"patrones {key}/{tf}: fallo detectando ({e}) — se omite")
+    if out:
+        resumen = " ".join(f"{tf}={len(v)}" for tf, v in out.items())
+        _log(f"{key}: patrones detectados {resumen}")
+    return out
 
 
 def main():

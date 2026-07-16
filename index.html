@@ -1518,7 +1518,16 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     const startIdx = years === 0 ? 0 : Math.max(0, n - years*252);
     instCharts.forEach(({chart, series})=>{
       chart.data.labels = allDates.slice(startIdx);
-      chart.data.datasets.forEach((ds, i)=>{ ds.data = series[i].slice(startIdx); });
+      chart.data.datasets.forEach((ds, i)=>{
+        ds.data = series[i].slice(startIdx);
+        // el color de la barra de flujo depende del signo del propio valor -- hay
+        // que RECALCULARLO sobre los datos ya recortados, nunca reutilizar el
+        // array de colores del histórico completo (quedaría desalineado con la
+        // ventana visible y pintaría el signo de un día distinto).
+        if (Array.isArray(ds.backgroundColor)){
+          ds.backgroundColor = ds.data.map(v => v>=0 ? 'rgba(13,148,136,.55)' : 'rgba(192,57,43,.55)');
+        }
+      });
       chart.update('none');
     });
   }

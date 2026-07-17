@@ -26,10 +26,17 @@ jobs:
       # velas para la pestaña "Estudio técnico". Si falla (p.ej. intradía
       # caído), no tumba el workflow: se omite y el resto se sube igual.
       - run: python generar_precios.py || echo "generar_precios.py falló — se omite precios.json"
+      # Pestaña Institucional — solo el bloque auto-descargable (VIX/VIX9D/
+      # VIX3M/VVIX/SKEW de CBOE + COT NASDAQ-100 de la CFTC, ambas con URL/API
+      # pública estable, sin credenciales). PCR, cadena de opciones y fund
+      # flows siguen siendo manuales -> aquí simplemente no están presentes,
+      # y el script ya sabe generar el JSON igual sin ellos (se quedan en
+      # blanco hasta la próxima corrida local con esos CSV puestos a mano).
+      - run: python generar_institucional.py --dir INSTITUCIONAL || echo "generar_institucional.py falló — se omite institucional.json"
       - name: commit y push si hay cambios
         run: |
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
-          git add historico_maestro.csv sistema_regimen_tilt.json precios.json
+          git add historico_maestro.csv sistema_regimen_tilt.json precios.json institucional.json
           git diff --staged --quiet || git commit -m "Actualización automática $(date -u +%Y-%m-%d)"
           git push

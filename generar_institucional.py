@@ -6,30 +6,40 @@ generar_institucional.py — genera institucional.json para la pestaña
 complejo de volatilidad, SKEW y GEX/muros de opciones).
 
 Lee todos sus insumos de la carpeta INSTITUCIONAL/ (misma ruta que ya usas:
-C:\\Users\\m21lo\\regimen-tilt-nq\\INSTITUCIONAL), así que basta con seguir
-dejando ahí los CSV/TXT que ya descargas manualmente (fund flows, COT,
-PCR, VIX/VIX9D/VIX3M/VVIX, SKEW, cadena de opciones de QQQ). No hay
-descarga automática: son series que hoy obtienes a mano de fuentes sin
-API pública estable (CBOE, CFTC, ETF.com), así que este script solo
-consolida lo que ya tienes en disco.
+C:\\Users\\m21lo\\regimen-tilt-nq\\INSTITUCIONAL).
 
-Degradación elegante: si un archivo falta o cambia de formato, ESA pieza
-se omite (se loguea) y el resto del payload se genera igual. Nunca rompe
-el pipeline.
+Desde julio 2026, DOS bloques se auto-descargan de una fuente pública
+estable (ver refrescar_cboe/refrescar_cot) y ya NO hace falta bajarlos a
+mano nunca más:
+  - VIX / VIX9D / VIX3M / VVIX / SKEW  -> CBOE (cdn.cboe.com)
+  - COT NASDAQ-100 (código 209742)     -> CFTC (API Socrata pública)
+Estas dos fuentes bastan para el score IC-validado del composite, así que
+esa parte del dashboard se mantiene fresca SOLA, incluso corriendo en la
+nube (GitHub Actions) sin ningún CSV manual presente.
+
+El resto sigue siendo estrictamente manual porque no existe fuente
+gratuita/API pública estable conocida: fund flows (ETF.com), PCR (CBOE,
+sin API), cadena de opciones de QQQ (Nasdaq, snapshot del día). Sigue
+dejando esos CSV en INSTITUCIONAL/ cuando quieras refrescarlos.
+
+Degradación elegante: si una pieza falta (auto o manual) o cambia de
+formato, ESA pieza se omite (se loguea) y el resto del payload se genera
+igual. resultado_flujos.csv YA NO es obligatorio: si falta, se usa VIX
+como eje temporal y el composite score se genera igual (solo flujos/AUM
+quedan vacíos hasta que corras el script en local con ese CSV puesto).
 
 Uso:
-    python generar_institucional.py             # escribe ./institucional.json
-    python generar_institucional.py --dir OTRA/RUTA/INSTITUCIONAL
+    python generar_institucional.py                    # auto-descarga CBOE/CFTC + escribe ./institucional.json
+    python generar_institucional.py --dir OTRA/RUTA
+    python generar_institucional.py --no-download       # solo con lo que ya haya en --dir (sin tocar la red)
 
-Se integra como un paso más en actualizar.yml / actualizar_todo.bat, justo
-después de generar_precios.py. OJO: como estos archivos NO se generan por
-API (los actualizas tú a mano descargando de CBOE/ETF.com/CFTC), este
-script no falla si la carpeta no ha cambiado desde la última corrida —
-simplemente reescribe institucional.json con los mismos datos.
+Se integra como un paso más en actualizar.yml (nightly, solo el bloque
+auto) y en actualizar_todo.bat (local, auto + manual combinados).
 """
 import argparse
 import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import pandas as pd
@@ -59,6 +69,72 @@ FILES = {
 OPTIONS_GLOB = "qqq_options_chain_*.csv"
 
 ROLL_Z_WINDOW = 756  # ~3 años de sesiones, para z-scores
+
+# ---------------------------------------------------------------------
+# AUTO-DESCARGA (fuentes con URL/API pública estable, sin necesidad de
+# descarga manual). Cubren VIX/VIX9D/VIX3M/VVIX/SKEW (CBOE) y COT (CFTC).
+# PCR, cadena de opciones y flujos ETF siguen siendo manuales: no existe
+# fuente gratuita estable conocida para ellas -> se quedan en INSTITUCIONAL/
+# esperando la descarga manual de siempre. Si una descarga automática falla
+# (red caída, CBOE/CFTC cambian el formato, etc.) se deja el fichero local
+# existente tal cual -- nunca rompe el pipeline.
+# ---------------------------------------------------------------------
+CBOE_BASE = "https://cdn.cboe.com/api/global/us_indices/daily_prices"
+CBOE_AUTO = {"vix": "VIX", "vix9d": "VIX9D", "vix3m": "VIX3M", "vvix": "VVIX", "skew": "SKEW"}
+
+CFTC_TFF_FUTURES_ONLY = "https://publicreporting.cftc.gov/resource/gpe5-46if.json"
+CFTC_NDX_CODE = "209742"  # NASDAQ-100, TFF Futures Only
+
+COT_RENAME = {
+    "report_date_as_yyyy_mm_dd": "Report_Date_as_YYYY-MM-DD",
+    "asset_mgr_positions_long_all": "Asset_Mgr_Positions_Long_All",
+    "asset_mgr_positions_short_all": "Asset_Mgr_Positions_Short_All",
+    "lev_money_positions_long_all": "Lev_Money_Positions_Long_All",
+    "lev_money_positions_short_all": "Lev_Money_Positions_Short_All",
+    "dealer_positions_long_all": "Dealer_Positions_Long_All",
+    "dealer_positions_short_all": "Dealer_Positions_Short_All",
+    "open_interest_all": "Open_Interest_All",
+}
+
+
+def _http_get(url: str, timeout=20) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "regimen-tilt-nq/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def refrescar_cboe(base: Path):
+    """Descarga VIX/VIX9D/VIX3M/VVIX/SKEW desde la URL pública estable de CBOE
+    y sobrescribe el CSV local correspondiente en `base`. Mismo formato exacto
+    que ya usan load_vixlike/load_skew, así que no hace falta tocar nada más."""
+    for key, name in CBOE_AUTO.items():
+        fname = FILES[key]
+        url = f"{CBOE_BASE}/{name}_History.csv"
+        try:
+            data = _http_get(url)
+            (base / fname).write_bytes(data)
+            _log(f"CBOE {name}: descargado OK ({len(data)} bytes) -> {fname}")
+        except Exception as e:
+            _log(f"AVISO — no se pudo descargar {name} de CBOE, uso el CSV local existente: {e}")
+
+
+def refrescar_cot(base: Path, cftc_code: str = CFTC_NDX_CODE):
+    """Descarga el informe TFF Futures Only (CFTC, API Socrata pública) para el
+    código NASDAQ-100 y lo guarda con las mismas columnas que espera load_cot().
+    Si falla, deja el fichero local existente igual (nunca rompe el pipeline)."""
+    url = (f"{CFTC_TFF_FUTURES_ONLY}?$where=cftc_contract_market_code='{cftc_code}'"
+           "&$order=report_date_as_yyyy_mm_dd DESC&$limit=1000")
+    try:
+        rows = json.loads(_http_get(url))
+        if not rows:
+            raise ValueError("respuesta vacía de la API de la CFTC")
+        df = pd.DataFrame(rows).rename(columns=COT_RENAME)
+        keep = list(COT_RENAME.values())
+        df = df[[c for c in keep if c in df.columns]]
+        df.to_csv(base / FILES["cot"], index=False)
+        _log(f"CFTC COT ({cftc_code}): descargado OK ({len(df)} filas) -> {FILES['cot']}")
+    except Exception as e:
+        _log(f"AVISO — no se pudo descargar COT de la CFTC, uso el fichero local existente: {e}")
 
 
 def _safe(fn):
@@ -248,11 +324,27 @@ def build(base: Path) -> dict:
     vix_curve = load_vix_curve(base)
     gex = load_options_gex(base)
 
-    if flujos is None:
-        _log("ERROR — resultado_flujos.csv es obligatorio (define el eje temporal). Abortando.")
+    # Eje temporal: preferimos flujos (mas historia real y trae precio/AUM),
+    # pero ya NO es obligatorio. Si no esta disponible -- p.ej. una corrida
+    # automatica en la nube, sin los CSV manuales -- usamos VIX como eje
+    # (se descarga solo via refrescar_cboe). Esto permite que el score
+    # IC-validado (que solo depende de VIX/VIX9D/VIX3M/VVIX) se genere cada
+    # noche sin intervencion manual; flujos/PCR/GEX simplemente quedan en
+    # blanco hasta la proxima corrida local con los CSV actualizados.
+    if flujos is not None:
+        m = flujos
+    elif vix is not None:
+        _log("AVISO — resultado_flujos.csv no disponible; uso VIX como eje temporal "
+             "(flujos/AUM quedaran vacios hasta la proxima corrida local).")
+        m = vix[["date"]].copy()
+        m["flow_usd"] = np.nan
+        m["price"] = np.nan
+        m["aum"] = np.nan
+    else:
+        _log("ERROR — ni flujos.csv ni VIX (local o descargado) disponibles; "
+             "no hay eje temporal posible. Abortando.")
         sys.exit(1)
 
-    m = flujos
     for extra in [pcr, vix, vix9d, vix3m, vvix, skew]:
         if extra is not None:
             m = m.merge(extra, on="date", how="left")
@@ -351,12 +443,16 @@ def main():
                      help="Si se indica, también escribe el DataFrame combinado completo "
                           "(todas las fechas, sin redondear/recortar) a este CSV -- lo usan "
                           "ic_harness.py y event_study.py como 'master_full.csv'.")
+    ap.add_argument("--no-download", action="store_true",
+                     help="No intentar descargar CBOE/CFTC; usa solo lo que ya haya en --dir.")
     args = ap.parse_args()
 
     base = Path(args.dir)
-    if not base.exists():
-        _log(f"ERROR — no existe la carpeta {base.resolve()}")
-        sys.exit(1)
+    base.mkdir(parents=True, exist_ok=True)  # en un runner en la nube esta carpeta no existe aun
+
+    if not args.no_download:
+        refrescar_cboe(base)
+        refrescar_cot(base)
 
     payload, merged = build(base)
     Path(args.out).write_text(json.dumps(payload), encoding="utf-8")

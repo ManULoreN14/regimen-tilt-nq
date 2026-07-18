@@ -1413,32 +1413,43 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     (function poll(){ if(test()||Date.now()-t0>ms) return res(); setTimeout(poll,180); })();
   });
 
-  // ---------- precio spot (best-effort, cliente, sin backend) ----------
-  // Usa el endpoint CSV público de Stooq sobre QQQ (proxy del Nasdaq-100,
-  // igual que el 4H) porque es de acceso libre desde el navegador sin clave.
-  // Si el navegador del usuario bloquea el origen (CORS/red), se desactiva
-  // en silencio: nunca rompe la pestaña ni muestra un error visible.
+  // ---------- precio spot (casi en vivo, vía proxy propio en Vercel) ----------
+  // Antes usaba Stooq directo desde el navegador (best-effort, sin control
+  // sobre si permite CORS). Ahora usa un proxy propio (regimen-tilt-proxy,
+  // mismo patrón que nq-proxy/NQ Unified): la función serverless llama a
+  // Yahoo Finance server-side, sin problema de CORS, y devuelve NDX/QQQ/VIX
+  // ya limpios. Si el proxy falla o no está desplegado aún, se desactiva en
+  // silencio — nunca rompe la pestaña.
+  //
+  // CAMBIA ESTA URL por la que te dé Vercel al desplegar regimen-tilt-proxy
+  // (ver README.md de ese repo), p.ej. 'https://regimen-tilt-proxy.tu-usuario.vercel.app/api/spot'
+  const SPOT_PROXY = 'https://regimen-tilt-proxy.vercel.app/api/spot';
+
   let spotTimer=null;
   async function pollSpot(){
+    const el = $('espot');
     try{
-      const r = await fetch('https://stooq.com/q/l/?s=qqq.us&f=sd2t2c&h&e=csv', {cache:'no-store'});
+      const r = await fetch(SPOT_PROXY + '?_=' + Date.now(), {cache:'no-store'});
       if(!r.ok) throw 0;
-      const txt = await r.text();
-      const cols = txt.trim().split('\n').slice(1)[0]?.split(',');
-      const price = cols && parseFloat(cols[3]);
-      const el = $('espot');
-      if(!isFinite(price)){ el.textContent=''; return; }
-      const prev = parseFloat(el.dataset.prev||price);
-      el.textContent = 'QQQ spot ' + price.toFixed(2);
-      el.classList.toggle('up', price>prev); el.classList.toggle('down', price<prev);
-      el.dataset.prev = price;
+      const data = await r.json();
+      const ndx = data && data.precios && data.precios.NDX;
+      if(!ndx || ndx.error || ndx.precio==null){ el.textContent=''; return; }
+      const vix = data.precios.VIX;
+      const prev = parseFloat(el.dataset.prev || ndx.precio);
+      const signo = ndx.cambioPct!=null ? (ndx.cambioPct>=0?'+':'') : '';
+      el.textContent = 'NDX ' + ndx.precio.toFixed(2)
+        + (ndx.cambioPct!=null ? ` (${signo}${ndx.cambioPct.toFixed(2)}%)` : '');
+      el.title = vix && !vix.error ? `VIX ${vix.precio.toFixed(2)} · precio de Yahoo Finance, no institucional` : '';
+      el.classList.toggle('up', ndx.precio>prev); el.classList.toggle('down', ndx.precio<prev);
+      el.dataset.prev = ndx.precio;
     }catch(e){
-      $('espot').textContent='';   // fallo de red/CORS: se oculta, no se rompe nada
+      el.textContent='';   // fallo de red/proxy no desplegado: se oculta, no se rompe nada
       if(spotTimer){ clearInterval(spotTimer); spotTimer=null; }
     }
   }
   function startSpot(){ if(spotTimer) return; pollSpot(); spotTimer=setInterval(pollSpot, 30000); }
   function stopSpot(){ if(spotTimer){ clearInterval(spotTimer); spotTimer=null; } }
+
 
   async function initEstudio(){
     if(inited) return; inited=true;

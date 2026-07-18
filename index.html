@@ -366,7 +366,12 @@
         <button class="etg edraw" data-draw="segment">Tendencia</button>
         <button class="etg edraw" data-draw="areaBox">Rectángulo</button>
         <button class="etg edraw" data-draw="fibonacciLine">Fibonacci</button>
+        <button class="etg edraw" data-draw="fibonacciExtension">Fib. extendido</button>
+        <button class="etg edraw" data-draw="parallelStraightLine">Canal</button>
+        <button class="etg edraw" data-draw="simpleAnnotation">Flecha</button>
+        <button class="etg edraw" data-draw="notaLibre">Nota</button>
         <button class="etg edraw" data-draw="horizontalStraightLine">Horizontal</button>
+        <button class="etg" id="emagnet" title="Al soltar un punto, engancharlo al open/high/low/close más cercano de la vela">Imán</button>
         <button class="etg" id="eclearAll" title="Borrar todos los dibujos de esta serie">Borrar dibujos</button>
       </div>
       <div class="egrp">
@@ -863,7 +868,50 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     }
   });
 
-  // ---------- overlay custom: línea de sincronización de crosshair ----------
+  // ---------- overlay custom: Fibonacci con extensiones (127%/161%/261%) ----------
+  // El fibonacciLine de fábrica solo trae niveles de retroceso (0-100%).
+  // Este añade también extensiones por encima de 100% y por debajo de 0%,
+  // el uso habitual para proyectar objetivos más allá del movimiento inicial.
+  kc.registerOverlay({
+    name:'fibonacciExtension', totalStep:3,
+    needDefaultPointFigure:true, needDefaultXAxisFigure:true, needDefaultYAxisFigure:true,
+    createPointFigures:({coordinates, bounding, overlay, precision, yAxis})=>{
+      const points = overlay.points;
+      if(coordinates.length<2 || !isFinite(points[0].value) || !isFinite(points[1].value)) return [];
+      const percents=[-0.618,-0.272,0,0.236,0.382,0.5,0.618,0.786,1,1.272,1.618,2.618];
+      const yDif=coordinates[0].y-coordinates[1].y, valueDif=points[0].value-points[1].value;
+      const startX=0, endX=bounding.width;
+      const lines=[], texts=[];
+      const prec = (yAxis && yAxis.isInCandle && !yAxis.isInCandle()) ? (precision.excludePriceVolumeMax) : precision.price;
+      percents.forEach(p=>{
+        const y = coordinates[1].y + yDif*p;
+        const value = ((points[1].value||0) + valueDif*p).toFixed(prec);
+        lines.push({ coordinates:[{x:startX,y},{x:endX,y}] });
+        texts.push({ x:startX, y, text:`${value} (${(p*100).toFixed(1)}%)`, baseline:'bottom' });
+      });
+      return [
+        { type:'line', attrs:lines, styles:{ color:'#8b5cf6', size:1 } },
+        { type:'text', isCheckEvent:false, attrs:texts, styles:{ color:'#8b5cf6', size:10 } }
+      ];
+    }
+  });
+
+  // ---------- overlay custom: nota de texto libre ----------
+  // Un clic coloca la nota; se pide el texto con prompt() (simple y fiable).
+  // Si se cancela el prompt, la nota se retira (no deja notas vacías).
+  kc.registerOverlay({
+    name:'notaLibre', totalStep:2,
+    needDefaultPointFigure:true, needDefaultXAxisFigure:false, needDefaultYAxisFigure:false,
+    createPointFigures:({coordinates, overlay})=>{
+      if(!coordinates.length) return [];
+      const p=coordinates[0];
+      return [{ type:'text', attrs:{ x:p.x+8, y:p.y, text:overlay.extendData||'', align:'left', baseline:'middle' },
+        styles:{ color:kCssVar('--ink')||'#16181d', size:12, weight:600,
+          backgroundColor:kCssVar('--panel')||'#fff', borderColor:'#f59e0b', borderSize:1, paddingLeft:6, paddingRight:6, paddingTop:3, paddingBottom:3 } }];
+    }
+  });
+
+
   kc.registerOverlay({
     name:'crossSync', totalStep:1, lock:true,
     needDefaultPointFigure:false, needDefaultXAxisFigure:false, needDefaultYAxisFigure:false,
@@ -959,12 +1007,14 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} },
   };
 
-  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2, candleMode='normal', patternsOn=false;
+  let inited=false, serieKey=null, demo=false, layout='quad', focusSlot=2, candleMode='normal', patternsOn=false, magnetOn=false;
   const slots=[];                 // {i,el,chart,sel,empty,tf,hasData,ov:{uid:true},subIds,syncId,maxBtn}
   const activeMain=new Set(), activeSub=new Set();
   let SERIES={};
   let syncing=false, rafPending=false, pendingTs=undefined, srcSlot=null;
   let DRAWS={};                   // uid -> {name, points, styles?} — compartido entre las 4 temporalidades
+  const INDPREFS = {};            // serieKey -> {main:[...], sub:[...], periods:'20,50,200'} — plantilla por símbolo
+  let pendingDrawId=null, pendingDrawSlot=null, selectedOverlay=null;  // para Esc / Supr
 
   const periods = () => $('eperiods').value.split(',').map(s=>parseInt(s.trim(),10)).filter(n=>n>0);
   const calc = name =>
@@ -983,7 +1033,15 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   // desplazado o no aparecería). Se extrapola la fecha usando la posición
   // en píxeles del propio evento + el intervalo de la última vela, para que
   // dibujar hacia el margen futuro funcione en vez de romperse.
-  function resolveMissingTimestamps(slot, pts, evt){
+  // búsqueda binaria del índice de vela más cercano a un timestamp (se usa
+  // tanto para el encuadre automático como para el imán de precio)
+  function nearestIndex(dataList, ts){
+    let lo=0, hi=dataList.length-1;
+    if(hi<0) return 0;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(dataList[mid].timestamp<ts) lo=mid+1; else hi=mid; }
+    return lo;
+  }
+  function finalizePoints(slot, pts, evt){
     const dl = slot.chart.getDataList();
     if(!dl || dl.length<2) return (pts||[]).map(p=>({timestamp:p.timestamp, value:p.value}));
     const lastIdx = dl.length-1;
@@ -1002,13 +1060,24 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       lastPageX = rect.left + paneX;
     }catch(e){}
     return (pts||[]).map((p,i)=>{
-      if(p.timestamp!=null) return {timestamp:p.timestamp, value:p.value};
-      let ts=null;
-      if(evt && typeof evt.pageX==='number' && lastPageX!=null && barSpace){
-        ts = lastTs + Math.round((evt.pageX - lastPageX) / barSpace) * interval;
+      let ts = p.timestamp, value = p.value;
+      if(ts==null){
+        if(evt && typeof evt.pageX==='number' && lastPageX!=null && barSpace){
+          ts = lastTs + Math.round((evt.pageX - lastPageX) / barSpace) * interval;
+        }
+        if(ts==null) ts = lastTs + interval * (i+1);   // último recurso, nunca queda sin fecha
       }
-      if(ts==null) ts = lastTs + interval * (i+1);   // último recurso, nunca queda sin fecha
-      return {timestamp:ts, value:p.value};
+      if(magnetOn && dl.length){
+        const idx = Math.min(dl.length-1, nearestIndex(dl, ts));
+        const bar = dl[idx];
+        if(bar){
+          const candidatos = [bar.open, bar.high, bar.low, bar.close].filter(v=>v!=null);
+          if(candidatos.length){
+            value = candidatos.reduce((a,b)=> Math.abs(b-value)<Math.abs(a-value) ? b : a);
+          }
+        }
+      }
+      return {timestamp:ts, value};
     });
   }
   function saveDraws(){ store.set(drawKey(), Object.entries(DRAWS).map(([id,d])=>Object.assign({id},d))); }
@@ -1030,11 +1099,12 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     return { line:{ color:hexToRgba(color, alpha), size } };
   }
 
-  function createOnAllSlots(id, name, points, styles, exceptSlot){
+  function createOnAllSlots(id, name, points, styles, exceptSlot, extendData){
     slots.forEach(s=>{
       if(s===exceptSlot || !s.hasData || s.ov[id]) return;
       const tpl2 = drawTpl(s, name, points, id);
       if(styles) tpl2.styles = styleOverride(name, styles);
+      if(extendData!=null) tpl2.extendData = extendData;
       const created = s.chart.createOverlay(tpl2);
       if(created){ s.ov[id]=true; ensureOverlayVisible(s, id); }
     });
@@ -1055,15 +1125,6 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   // todo el histórico, así que un trazo dibujado con fechas antiguas puede
   // quedar fuera de la ventana visible (aunque los datos sean correctos) y
   // parecer "desplazado" o "no aparece". Se corrige encuadrando la vista.
-  // búsqueda binaria del índice de vela más cercano a un timestamp (mismo
-  // criterio que usa KLineChart internamente para overlays, pero calculado
-  // aquí para no depender de si el overlay ya resolvió su propio dataIndex)
-  function nearestIndex(dataList, ts){
-    let lo=0, hi=dataList.length-1;
-    if(hi<0) return 0;
-    while(lo<hi){ const mid=(lo+hi)>>1; if(dataList[mid].timestamp<ts) lo=mid+1; else hi=mid; }
-    return lo;
-  }
   function ensureOverlayVisible(slot, id){
     const o = slot.chart.getOverlayById(id);
     if(!o || !o.points || !o.points.length) return;
@@ -1088,17 +1149,30 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     if(id) tpl.id = id;
     tpl.onDrawEnd = (evt)=>{
       const overlay = evt.overlay;
-      DRAWS[overlay.id] = { name:overlay.name, points:resolveMissingTimestamps(slot, overlay.points, evt) };
-      saveDraws();
+      DRAWS[overlay.id] = { name:overlay.name, points:finalizePoints(slot, overlay.points, evt) };
       slot.ov[overlay.id]=true;
-      createOnAllSlots(overlay.id, overlay.name, DRAWS[overlay.id].points, DRAWS[overlay.id].styles, slot);
       const btn=document.querySelector('#view-estudio button.edraw.on'); if(btn) btn.classList.remove('on');
+      if(pendingDrawId===overlay.id){ pendingDrawId=null; pendingDrawSlot=null; }
+      if(name==='notaLibre'){
+        const texto = window.prompt('Texto de la nota:', '');
+        if(!texto){
+          slot.chart.removeOverlay({id:overlay.id});   // dispara onRemoved, que ya limpia DRAWS
+          return false;
+        }
+        DRAWS[overlay.id].extendData = texto;
+        slot.chart.overrideOverlay({id:overlay.id, extendData:texto});
+        saveDraws();
+        createOnAllSlots(overlay.id, overlay.name, DRAWS[overlay.id].points, DRAWS[overlay.id].styles, slot, texto);
+        return false;
+      }
+      saveDraws();
+      createOnAllSlots(overlay.id, overlay.name, DRAWS[overlay.id].points, DRAWS[overlay.id].styles, slot);
       return false;
     };
     tpl.onPressedMoveEnd = (evt)=>{
       const overlay = evt.overlay;
       if(!DRAWS[overlay.id]) DRAWS[overlay.id]={name:overlay.name};
-      DRAWS[overlay.id].points = resolveMissingTimestamps(slot, overlay.points, evt);
+      DRAWS[overlay.id].points = finalizePoints(slot, overlay.points, evt);
       saveDraws();
       updatePointsOnAllSlots(overlay.id, DRAWS[overlay.id].points, slot);
       return false;
@@ -1109,12 +1183,18 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       delete slot.ov[overlay.id];
       removeFromAllSlots(overlay.id, slot);
       closeDrawMenu();
+      if(selectedOverlay===overlay.id) selectedOverlay=null;
       return false;
     };
     tpl.onRightClick = (evt)=>{
       if(evt && evt.preventDefault) evt.preventDefault();
+      selectedOverlay = evt.overlay.id;
       openDrawMenu(evt.overlay, evt);
       return true;
+    };
+    tpl.onClick = (evt)=>{
+      selectedOverlay = evt.overlay.id;   // habilita Supr para borrar este trazo
+      return false;
     };
     return tpl;
   }
@@ -1127,6 +1207,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     Object.entries(DRAWS).forEach(([id,d])=>{
       const tpl = drawTpl(slot, d.name, d.points, id);
       if(d.styles) tpl.styles = styleOverride(d.name, d.styles);
+      if(d.extendData!=null) tpl.extendData = d.extendData;
       const created = slot.chart.createOverlay(tpl);
       if(created){ slot.ov[id]=true; ensureOverlayVisible(slot, id); }
     });
@@ -1180,7 +1261,6 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     });
   }
   document.addEventListener('click', (e)=>{ if(!e.target.closest('#edrawmenu')) closeDrawMenu(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawMenu(); });
 
   // ---------- series (precios.json + equity en memoria) ----------
   const tsOf = f => Date.parse(f+'T00:00:00Z');
@@ -1276,6 +1356,31 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   const addSub = name => slots.forEach(s=>{ const p=calc(name); s.subIds[name]=s.chart.createIndicator(p?{name,calcParams:p}:name, false, {height:92}); });
   const removeSub = name => slots.forEach(s=>{ if(s.subIds[name]){ s.chart.removeIndicator(s.subIds[name], name); delete s.subIds[name]; } });
 
+  // ---------- plantilla de indicadores por símbolo ----------
+  // Cada serie recuerda qué indicadores tenías activos ahí (distinto de lo
+  // que tengas en otra). Se guarda en memoria (por sesión); si quieres que
+  // sobreviva al refresco, es la misma idea que localStorage de los dibujos.
+  function saveIndPrefs(){
+    if(!serieKey) return;
+    INDPREFS[serieKey] = { main:[...activeMain], sub:[...activeSub], periods:$('eperiods').value };
+  }
+  function applyIndPrefs(key){
+    // quita lo que estuviera activo del símbolo anterior
+    [...activeMain].forEach(n=>{ removeMain(n); document.querySelector(`#view-estudio button.eind[data-ind="${n}"][data-pane="main"]`)?.classList.remove('on'); });
+    [...activeSub].forEach(n=>{ removeSub(n); document.querySelector(`#view-estudio button.eind[data-ind="${n}"][data-pane="sub"]`)?.classList.remove('on'); });
+    activeMain.clear(); activeSub.clear();
+    const pref = INDPREFS[key];
+    if(pref){
+      if(pref.periods) $('eperiods').value = pref.periods;
+      pref.main.forEach(n=>{ activeMain.add(n); addMain(n); document.querySelector(`#view-estudio button.eind[data-ind="${n}"][data-pane="main"]`)?.classList.add('on'); });
+      pref.sub.forEach(n=>{ activeSub.add(n); addSub(n); document.querySelector(`#view-estudio button.eind[data-ind="${n}"][data-pane="sub"]`)?.classList.add('on'); });
+    } else {
+      // primera vez que se ve este símbolo: por defecto solo EMA, igual que antes
+      activeMain.add('EMA'); addMain('EMA');
+      document.querySelector('#view-estudio button.eind[data-ind="EMA"][data-pane="main"]')?.classList.add('on');
+    }
+  }
+
   // ---------- crosshair sincronizado ----------
   function flushSync(){
     rafPending=false; syncing=true;
@@ -1348,11 +1453,29 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
   }
 
   // ---------- toolbar ----------
+  function cancelPendingDraw(){
+    if(pendingDrawId && pendingDrawSlot){
+      pendingDrawSlot.chart.removeOverlay({id:pendingDrawId});
+    }
+    pendingDrawId=null; pendingDrawSlot=null;
+    document.querySelectorAll('#view-estudio button.edraw.on').forEach(b=>b.classList.remove('on'));
+  }
+  function deleteSelected(){
+    if(!selectedOverlay) return;
+    removeFromAllSlots(selectedOverlay, null);
+    delete DRAWS[selectedOverlay]; saveDraws();
+    selectedOverlay=null;
+    closeDrawMenu();
+  }
   function wireToolbar(){
     $('epatBtn').addEventListener('click', ()=>{
       patternsOn = !patternsOn;
       $('epatBtn').classList.toggle('on', patternsOn);
       slots.forEach(s=>{ if(s.hasData) renderPatterns(s, SERIES[serieKey].tf[s.tf]); else clearPatterns(s); });
+    });
+    $('emagnet').addEventListener('click', ()=>{
+      magnetOn = !magnetOn;
+      $('emagnet').classList.toggle('on', magnetOn);
     });
     document.querySelectorAll('#view-estudio button.ecandle').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -1369,16 +1492,18 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
         const set=main?activeMain:activeSub;
         if(on){ set.add(name); main?addMain(name):addSub(name); }
         else  { set.delete(name); main?removeMain(name):removeSub(name); }
+        saveIndPrefs();
       });
     });
     $('eapply').addEventListener('click', ()=>{
       const p=periods();
       ['EMA','SMA'].forEach(n=>{ if(activeMain.has(n)) slots.forEach(s=>s.chart.overrideIndicator({name:n,calcParams:p},'candle_pane')); });
+      saveIndPrefs();
     });
     document.querySelectorAll('#view-estudio button.edraw').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const wasOn=btn.classList.contains('on');
-        document.querySelectorAll('#view-estudio button.edraw').forEach(b=>b.classList.remove('on'));
+        cancelPendingDraw();
         if(wasOn) return;
         if(!VISIBLE[layout].includes(focusSlot) || !slots[focusSlot].hasData){
           const s=visibleSlots().find(s=>s.hasData); if(s) setFocus(s.i);
@@ -1386,7 +1511,9 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
         const fs=slots[focusSlot];
         if(!fs || !fs.hasData) return;
         btn.classList.add('on');
-        fs.chart.createOverlay(drawTpl(fs, btn.dataset.draw, undefined, uid()));
+        const newId = uid();
+        pendingDrawId = newId; pendingDrawSlot = fs;
+        fs.chart.createOverlay(drawTpl(fs, btn.dataset.draw, undefined, newId));
       });
     });
     $('eclearAll').addEventListener('click', ()=>{
@@ -1397,7 +1524,17 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
       btn.addEventListener('click', ()=>setLayout(btn.dataset.layout));
     });
     $('emaxbackdrop').addEventListener('click', exitMax);
-    document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitMax(); });
+    document.addEventListener('keydown', e=>{
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if(tag==='input' || tag==='textarea' || tag==='select') return;   // no interferir al escribir
+      if($('view-estudio').hidden) return;                              // solo cuando la pestaña está activa
+      if(e.key==='Escape'){ cancelPendingDraw(); closeDrawMenu(); exitMax(); return; }
+      if(e.key==='Delete' || e.key==='Backspace'){ if(selectedOverlay){ e.preventDefault(); deleteSelected(); } return; }
+      if(e.key==='1'){ setLayout('quad'); return; }
+      if(e.key==='2'){ setLayout('trio'); return; }
+      if(e.key==='3'){ setLayout('duo'); return; }
+      if(e.key==='4'){ const fs=slots[focusSlot]; if(fs) toggleMax(fs); return; }
+    });
   }
 
   function fillSeries(){
@@ -1405,7 +1542,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     Object.entries(SERIES).forEach(([k,v])=>{ const o=document.createElement('option'); o.value=k; o.textContent=v.nombre; sel.appendChild(o); });
     serieKey = SERIES.NDX? 'NDX' : Object.keys(SERIES)[0];
     if(serieKey) sel.value=serieKey;
-    sel.onchange=()=>{ serieKey=sel.value; renderAll(); };
+    sel.onchange=()=>{ saveIndPrefs(); serieKey=sel.value; renderAll(); applyIndPrefs(serieKey); };
   }
 
   const waitFor = (test, ms=6000) => new Promise(res=>{
@@ -1466,7 +1603,7 @@ fetch("./sistema_regimen_tilt.json?_="+Date.now())
     fillSeries();
     wireToolbar();
     renderAll();
-    activeMain.add('EMA'); document.querySelector('#view-estudio button.eind[data-ind="EMA"]').classList.add('on'); addMain('EMA');
+    applyIndPrefs(serieKey);
     setFocus(2);
     requestAnimationFrame(()=>slots.forEach(s=>s.chart.resize()));
   }

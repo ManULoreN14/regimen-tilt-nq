@@ -1,36 +1,36 @@
 {
   "nra_das": {
     "sistema": "NRA-DAS",
-    "periodo": "2002-07-31 / 2026-07-16",
-    "n_dias": 6027,
-    "cagr_pct": 12.08,
+    "periodo": "2002-07-31 / 2026-07-21",
+    "n_dias": 6030,
+    "cagr_pct": 12.09,
     "vol_anual_pct": 12.66,
     "sharpe": 0.965,
-    "sortino": 1.336,
-    "calmar": 0.389,
+    "sortino": 1.337,
+    "calmar": 0.39,
     "max_dd_pct": -31.04,
     "hit_rate_mensual_pct": 61.1,
     "mejor_año_pct": 44.24,
     "peor_año_pct": -24.21,
-    "equity_final": 15.1658
+    "equity_final": 15.2143
   },
   "qqq_bh": {
     "sistema": "QQQ_BH",
-    "periodo": "2002-07-31 / 2026-07-16",
-    "n_dias": 6027,
-    "cagr_pct": 16.04,
+    "periodo": "2002-07-31 / 2026-07-21",
+    "n_dias": 6030,
+    "cagr_pct": 16.06,
     "vol_anual_pct": 22.07,
     "sharpe": 0.785,
-    "sortino": 1.045,
-    "calmar": 0.3,
+    "sortino": 1.046,
+    "calmar": 0.301,
     "max_dd_pct": -53.4,
     "hit_rate_mensual_pct": 61.8,
     "mejor_año_pct": 54.86,
     "peor_año_pct": -41.73,
-    "equity_final": 34.4622
+    "equity_final": 34.6102
   },
   "turnover": {
-    "turnover_anual_pct": 516.0,
+    "turnover_anual_pct": 515.7,
     "dias_con_cambio_peso_1pct": 2468
   },
   "crisis": {
@@ -115,5 +115,5 @@
   "criterio_incorporacion": "|IC| > 0.03 AND p < 0.05 AND Stability >= 70% AND WF >= 3/4",
   "arquitectura": "Dual: Direction Score (tendencia) + Volatility Brake (riesgo)",
   "db_tabla": "backtest_extendido_2003_2026",
-  "generado": "2026-07-17T23:20:50.462804"
+  "generado": "2026-07-23T09:39:55.129321"
 }

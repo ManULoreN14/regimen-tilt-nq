@@ -22,6 +22,15 @@ set "QE_BACKTESTS=%QE_DIR%\backtests"
 
 echo.
 echo ================================================================
+echo  0/6 - Sincronizando con GitHub antes de generar datos
+echo ================================================================
+git pull origin main
+if errorlevel 1 (
+    echo ERROR: pull fallido o con conflictos. Resuelve manualmente antes de continuar.
+    pause
+    exit /b 1
+)
+echo ================================================================
 echo  1/6 - Generando backtest NRA-DAS
 echo ================================================================
 cd /d "%NRA_BACKTESTS%"

@@ -1,0 +1,26 @@
+{
+  "id": "./decision.html",
+  "name": "Decisión Nasdaq",
+  "short_name": "Decisión NQ",
+  "description": "Qué hacer esta semana con el Tecnológico y el Dinero: núcleo 30% + Régimen+Tilt.",
+  "start_url": "./decision.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#16181d",
+  "theme_color": "#16181d",
+  "icons": [
+    {
+      "src": "decision-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "decision-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

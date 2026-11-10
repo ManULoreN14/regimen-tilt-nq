@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<link rel="manifest" href="manifest-decision.json">
+<link rel="apple-touch-icon" href="decision-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Decisión NQ">
+<title>Decisión Nasdaq</title>
+<script>
+  // Mismo bootstrap de tema que index.html (clave compartida rt_theme)
+  (function(){
+    var saved=null; try{ saved=localStorage.getItem('rt_theme'); }catch(e){}
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', saved || (dark ? 'dark' : 'light'));
+  })();
+</script>
+<style>
+  :root{
+    --bg:#f7f7f4; --panel:#ffffff; --ink:#16181d; --muted:#6b7280; --line:#e6e6e0;
+    --accent:#0d9488; --accent-soft:rgba(13,148,136,.12);
+    --warn:#b45309; --warn-soft:#fef3c7; --act:#c0392b; --act-soft:#fdeceb;
+    --solid:#16181d; --solid-text:#ffffff;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1015; --panel:#171a21; --ink:#e9ebef; --muted:#8b93a1; --line:#262b35;
+    --accent:#2dd4bf; --accent-soft:rgba(45,212,191,.14);
+    --warn:#fbbf24; --warn-soft:rgba(251,191,36,.14); --act:#f87171; --act-soft:rgba(248,113,113,.14);
+    --solid:#e9ebef; --solid-text:#0e1015;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;
+    padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+    padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:max(28px,env(safe-area-inset-bottom,0px))}
+  main{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  .asof{margin-left:auto;color:var(--muted);font-size:12px;font-family:var(--mono)}
+  .asof.old{color:var(--act);font-weight:700}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  input{width:100%;font:600 18px var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;min-width:0}
+  input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  #out{display:flex;flex-direction:column;gap:14px}
+  #out:empty{display:none}
+  td:last-child{white-space:normal}
+  .decision{border-radius:12px;padding:18px 16px;border:1px solid var(--line);background:var(--panel)}
+  .decision .tag{font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .decision .big{font-size:24px;font-weight:700;margin:6px 0 4px;letter-spacing:-.01em;line-height:1.2}
+  .decision .sub{font-size:14px;color:var(--muted)}
+  .decision.nada{background:var(--accent-soft);border-color:transparent}
+  .decision.nada .big{color:var(--accent)}
+  .decision.mover{background:var(--act-soft);border-color:transparent}
+  .decision.mover .big{color:var(--act)}
+  .decision.espera{background:var(--panel)}
+  .banner{border-radius:10px;padding:12px 14px;font-size:14px}
+  .banner.warn{background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn)}
+  .banner.act{background:var(--act-soft);color:var(--ink);border:1px solid var(--act)}
+  .banner b{font-weight:700}
+  dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 14px}
+  dt{color:var(--muted);font-size:13px}
+  dd{margin:0;text-align:right;font-family:var(--mono);font-size:13.5px;min-width:0;overflow-wrap:anywhere}
+  .bar{position:relative;height:10px;border-radius:5px;background:var(--line);margin:12px 0 4px}
+  .bar i{position:absolute;top:-3px;width:3px;height:16px;border-radius:2px}
+  .bar .obj{background:var(--accent)} .bar .act{background:var(--ink)}
+  .bar .band{position:absolute;top:0;height:100%;background:var(--accent-soft)}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:baseline}
+  .legend .o::before{background:var(--accent)} .legend .a::before{background:var(--ink)}
+  h2{font-size:13px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600}
+  .row2{display:flex;gap:10px}
+  button{font:600 13px var(--sans);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+  .foot{font-size:12px;color:var(--muted)}
+  .err{color:var(--act);font-weight:600}
+  @media (max-width:360px){.inputs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Decisión Nasdaq</h1>
+    <span class="asof" id="asof">cargando…</span>
+  </header>
+
+  <section class="panel" aria-label="Tu cartera">
+    <div class="inputs">
+      <div><label for="tec">Tecnológico (€)</label><input id="tec" inputmode="decimal" autocomplete="off" placeholder="158324"></div>
+      <div><label for="din">Dinero (€)</label><input id="din" inputmode="decimal" autocomplete="off" placeholder="27516"></div>
+    </div>
+    <div class="hint">Usa lo que tengas hoy en cada fondo. Quedan guardados solo en este móvil.</div>
+  </section>
+
+  <section id="out" aria-live="polite"></section>
+
+  <section class="panel" id="porque" hidden>
+    <h2>Por qué</h2>
+    <dl id="dl"></dl>
+  </section>
+
+  <section class="panel" id="histpanel" hidden>
+    <h2>Mis consultas</h2>
+    <div class="tablewrap"><table id="hist"></table></div>
+    <div class="row2" style="margin-top:10px"><button id="clear" type="button">Borrar historial</button></div>
+  </section>
+
+  <p class="foot">Núcleo fijo 30% + 70% gestionado por Régimen+Tilt. Se revisa los lunes, o antes si hay aviso de cambio de régimen.
+  Datos de <a href="historico_maestro.csv" style="color:inherit">historico_maestro.csv</a>, actualizados cada noche.
+  Es una herramienta de apoyo, no un consejo de inversión.</p>
+</main>
+
+<script>
+(function(){
+"use strict";
+/* ---------- parámetros (idénticos a decision_nasdaq.py; no tocar sin repetir el backtest) ---------- */
+var NUCLEO=0.30, SMA=200, CONFIRM=3, LO=0.50, HI=1.00, NEUTRAL=0.75, BANDA=0.10;
+
+/* ---------- utilidades ---------- */
+function $(id){return document.getElementById(id)}
+var nf0=new Intl.NumberFormat('es-ES',{maximumFractionDigits:0});
+function eur(x){return nf0.format(Math.round(x))+' €'}
+function pc(x,d){return (x*100).toFixed(d==null?1:d).replace('.',',')+'%'}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function parseImporte(s){
+  s=String(s||'').replace(/[€\s]/g,'');
+  if(!s) return NaN;
+  if(s.indexOf(',')>=0) s=s.replace(/\./g,'').replace(',','.');
+  else if((s.match(/\./g)||[]).length>1 || (/^\d+\.\d{3}$/.test(s))) s=s.replace(/\./g,'');
+  var v=parseFloat(s); return isFinite(v)?v:NaN;
+}
+function store(k,v){try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){return null}}
+function iso(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+
+/* ---------- datos ---------- */
+function parseCSV(txt){
+  var lines=txt.trim().split(/\r?\n/), head=lines[0].split(','), ix={};
+  head.forEach(function(h,i){ix[h]=i});
+  var rows=[];
+  for(var i=1;i<lines.length;i++){
+    var c=lines[i].split(',');
+    var nd=parseFloat(c[ix.NDX_close]);
+    if(!isFinite(nd)) continue;                    // solo días con NDX, como hace el programa de PC
+    var g=function(k){return ix[k]==null?NaN:parseFloat(c[ix[k]])};
+    rows.push({fecha:c[ix.fecha],ndx:nd,vix:g('VIX_close'),vix3m:g('VIX3M_close'),vix9d:g('VIX9D_close'),
+               vvix:g('VVIX_close'),walcl:g('WALCL'),dff:g('DFF')});
+  }
+  return rows;
+}
+function ffill(a){var o=new Array(a.length),l=NaN;for(var i=0;i<a.length;i++){if(isFinite(a[i]))l=a[i];o[i]=l}return o}
+
+/* percentil expansivo: sin mirar al futuro; solo a partir de 60 observaciones */
+function pctExp(arr){
+  var n=arr.length,out=new Array(n),seen=[];
+  for(var i=0;i<n;i++){
+    out[i]=NaN; var x=arr[i];
+    if(!isFinite(x)) continue;
+    var lo=0,hi=seen.length;                       // inserción ordenada
+    while(lo<hi){var m=(lo+hi)>>1; if(seen[m]<x) lo=m+1; else hi=m;}
+    seen.splice(lo,0,x);
+    if(seen.length>=60){
+      var a=0,b=seen.length;                       // nº de valores <= x
+      while(a<b){var m2=(a+b)>>1; if(seen[m2]<=x) a=m2+1; else b=m2;}
+      out[i]=a/seen.length*100;
+    }
+  }
+  return out;
+}
+
+function calcular(rows){
+  var n=rows.length, i;
+  var ndx=rows.map(function(r){return r.ndx});
+  var vts=pctExp(rows.map(function(r){return r.vix3m/r.vix})).map(function(x){return 100-x});
+  var vvx=pctExp(rows.map(function(r){return r.vvix/r.vix})).map(function(x){return 100-x});
+  var v9d=pctExp(rows.map(function(r){return r.vix9d/r.vix}));
+  var vol3=new Array(n);
+  for(i=0;i<n;i++){var s=0,k=0;[vts[i],vvx[i],v9d[i]].forEach(function(x){if(isFinite(x)){s+=x;k++}});vol3[i]=k?s/k:NaN}
+  var score=pctExp(vol3);
+
+  var sma=new Array(n),acc=0;                      // media móvil de 200 sesiones
+  for(i=0;i<n;i++){acc+=ndx[i]; if(i>=SMA) acc-=ndx[i-SMA]; sma[i]=i>=SMA-1?acc/SMA:NaN}
+  var crudo=ndx.map(function(x,j){return isFinite(sma[j])&&x>=sma[j]?1:0});
+  var alc=new Array(n),actual=false;               // régimen con confirmación de 3 días
+  for(i=0;i<n;i++){
+    if(i>=CONFIRM-1){
+      var c=0;for(var j=0;j<CONFIRM;j++)c+=crudo[i-j];
+      if(!actual&&c===CONFIRM) actual=true; else if(actual&&c===0) actual=false;
+    }
+    alc[i]=actual;
+  }
+  var wal=ffill(rows.map(function(r){return r.walcl})), dff=ffill(rows.map(function(r){return r.dff}));
+  var obj=new Array(n),ges=new Array(n),duro=new Array(n);
+  for(i=0;i<n;i++){
+    var d=i>=60&&(wal[i]-wal[i-60]<0)&&(dff[i]-dff[i-60]>0.05);
+    duro[i]=!!d;
+    var b=isFinite(score[i])?(score[i]>=70?1:score[i]<=30?0:(score[i]-30)/40):0.5;
+    var g=(LO+b*(HI-LO))*(alc[i]?1:0);
+    if(d&&alc[i]) g=NEUTRAL;
+    ges[i]=g; obj[i]=NUCLEO+(1-NUCLEO)*g;
+  }
+  return {rows:rows,ndx:ndx,sma:sma,alc:alc,score:score,duro:duro,ges:ges,obj:obj,
+          ratio:rows.map(function(r){return r.vix/r.vix3m})};
+}
+window.__calcular=calcular; window.__parseCSV=parseCSV;   // para pruebas
+
+/* ---------- decisión ---------- */
+function decidir(S,tec,din,hoy){
+  var n=S.rows.length, L=n-1, fecha=new Date(S.rows[L].fecha+'T12:00:00');
+  var total=tec+din, w=total?tec/total:0, obj=S.obj[L], dif=obj-w;
+  var ult={ndx:S.ndx[L],sma:S.sma[L],alc:S.alc[L],score:S.score[L],duro:S.duro[L],ges:S.ges[L]};
+  var dist=(ult.ndx/ult.sma-1)*100;
+  var cambio=false; for(var i=Math.max(1,n-5);i<n;i++) if(S.alc[i]!==S.alc[i-1]) cambio=true;   // últimas 6 sesiones
+  var wd=hoy.getDay();                                       // 0 dom, 1 lun, 2 mar
+  var esRev=(wd===1||wd===2)||cambio;
+  // sesiones seguidas al otro lado de la media
+  var contr=0; for(i=L;i>=0;i--){var enc=S.ndx[i]>=S.sma[i]; if(enc===ult.alc) break; contr++;}
+  var vig=contr>0&&contr<CONFIRM;
+  var accion,texto;
+  if(!esRev){accion='espera';texto='Hoy no toca revisar'}
+  else if(Math.abs(dif)<BANDA){accion='nada';texto='No hacer nada'}
+  else if(dif>0){accion='mover';texto='Traspasar '+eur(dif*total)+' de Dinero a Tecnológico'}
+  else {accion='mover';texto='Traspasar '+eur(-dif*total)+' de Tecnológico a Dinero'}
+  return {fecha:fecha,total:total,w:w,obj:obj,dif:dif,ult:ult,dist:dist,cambio:cambio,esRev:esRev,
+          contr:contr,vig:vig,accion:accion,texto:texto,ratio:S.ratio[L],hoy:hoy,
+          edadDias:Math.round((hoy-fecha)/864e5)};
+}
+
+/* ---------- pintar ---------- */
+function pintar(D,hayImportes){
+  var as=$('asof'); as.textContent='datos al '+D.fecha.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'});
+  as.className='asof'+(D.edadDias>5?' old':'');
+  var h='';
+  if(D.edadDias>5) h+='<div class="banner act" role="alert"><b>Datos con '+D.edadDias+' días.</b> Revisa que la actualización nocturna del repositorio siga funcionando antes de operar.</div>';
+  if(!hayImportes){
+    h+='<div class="decision espera"><div class="tag">Decisión</div><div class="big">Escribe tu cartera</div><div class="sub">Indica cuánto tienes en cada fondo para calcular el traspaso.</div></div>';
+    h+='<div class="panel"><dl><dt>Objetivo al Tecnológico</dt><dd>'+pc(D.obj)+'</dd></dl></div>';
+  } else {
+    if(D.cambio&&Math.abs(D.dif)>=BANDA) h+='<div class="banner act"><b>El régimen ha cambiado esta semana:</b> se actúa hoy aunque no sea lunes.</div>';
+    var sub = D.accion==='mover'
+      ? (D.dif>0?'Sale de Dinero al VL de hoy y entra en Tecnológico al VL del siguiente día hábil.':'Sale del Tecnológico al VL de hoy, con el cierre de Wall Street de hoy.')
+      : D.accion==='espera' ? 'Se revisa los lunes, o cualquier día en que aparezca un aviso de cambio de régimen.'
+      : 'Estás a menos de '+Math.round(BANDA*100)+' puntos del objetivo.';
+    h+='<div class="decision '+D.accion+'"><div class="tag">Decisión</div><div class="big">'+esc(D.texto)+'</div><div class="sub">'+sub+'</div></div>';
+    var pOb=Math.min(100,Math.max(0,D.obj*100)), pAc=Math.min(100,Math.max(0,D.w*100));
+    h+='<div class="panel"><div class="bar" aria-hidden="true"><div class="band" style="left:'+Math.max(0,pOb-BANDA*100)+'%;width:'+(Math.min(100,pOb+BANDA*100)-Math.max(0,pOb-BANDA*100))+'%"></div><i class="obj" style="left:calc('+pOb+'% - 1px)"></i><i class="act" style="left:calc('+pAc+'% - 1px)"></i></div>'
+      +'<div class="legend"><span class="o">Objetivo '+pc(D.obj)+'</span><span class="a">Ahora '+pc(D.w)+'</span><span>Zona sin acción ±'+Math.round(BANDA*100)+' pp</span></div></div>';
+  }
+  if(D.vig){
+    var lado=D.ult.alc?'por debajo':'por encima', efecto=D.ult.alc?'salir (bajar al 30%)':'volver a entrar';
+    h+='<div class="banner warn"><b>Vigilancia:</b> el Nasdaq lleva '+D.contr+' sesión'+(D.contr>1?'es seguidas':'')+' '+lado+' de su media de 200 sesiones (hacen falta '+CONFIRM+'). Si se confirma, tocará '+efecto+'. Abre esta página cada mañana hasta que desaparezca el aviso.</div>';
+  }
+  $('out').innerHTML=h;
+
+  var rows=[];
+  rows.push(['Núcleo fijo',pc(NUCLEO,0)+' siempre invertido']);
+  rows.push(['Régimen',(D.ult.alc?'Alcista, dentro':'Bajista, fuera')+' ('+(D.dist>=0?'+':'')+D.dist.toFixed(1).replace('.',',')+'% vs media)']);
+  if(D.ult.alc) rows.push([D.ult.duro?'Switch monetario':'Tilt por volatilidad',
+      D.ult.duro?'Activo: parte gestionada al 0,75x':'Percentil '+Math.round(D.ult.score)+': parte gestionada al '+D.ult.ges.toFixed(2).replace('.',',')+'x']);
+  else rows.push(['Parte gestionada','0x, espera en Dinero']);
+  if(!D.vig&&D.ult.alc) rows.push(['Margen hasta la media','Caída de '+D.dist.toFixed(1).replace('.',',')+'% y 3 sesiones debajo']);
+  rows.push(['VIX / VIX3M',D.ratio.toFixed(2).replace('.',',')+(D.ratio>1?' · estrés de corto plazo':' · normal')+' (solo contexto)']);
+  rows.push(['Próxima revisión',D.vig?'Mañana por la mañana':'Lunes '+proxLunes(D.hoy)]);
+  $('dl').innerHTML=rows.map(function(r){return '<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>'}).join('');
+  $('porque').hidden=false;
+}
+function proxLunes(h){var d=new Date(h.getTime());var add=(8-d.getDay())%7||7;d.setDate(d.getDate()+add);return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'})}
+
+/* ---------- historial local (solo en este móvil) ---------- */
+function leerHist(){try{return JSON.parse(store('nq_hist')||'[]')}catch(e){return []}}
+function anotar(D){
+  if(!isFinite(D.total)||D.total<=0) return;
+  var hist=leerHist().filter(function(x){return x.f!==iso(D.hoy)});
+  hist.push({f:iso(D.hoy),d:iso(D.fecha),o:+(D.obj*100).toFixed(1),a:+(D.w*100).toFixed(1),dec:D.texto,v:D.vig?1:0});
+  store('nq_hist',JSON.stringify(hist.slice(-60)));
+}
+function pintarHist(){
+  var h=leerHist().slice().reverse().slice(0,15);
+  $('histpanel').hidden=!h.length;
+  if(!h.length) return;
+  $('hist').innerHTML='<tr><th>Día</th><th>Obj.</th><th>Ahora</th><th>Decisión</th></tr>'+h.map(function(x){
+    var p=x.f.split('-');
+    return '<tr><td>'+p[2]+'/'+p[1]+'</td><td>'+x.o.toFixed(1).replace('.',',')+'%</td><td>'+x.a.toFixed(1).replace('.',',')+'%</td><td>'+esc(x.dec)+(x.v?' ⚠':'')+'</td></tr>';
+  }).join('');
+}
+
+/* ---------- arranque ---------- */
+var S=null, q=new URLSearchParams(location.search);
+function refrescar(){
+  if(!S) return;
+  var tec=parseImporte($('tec').value), din=parseImporte($('din').value);
+  var ok=isFinite(tec)&&isFinite(din)&&tec+din>0;
+  var hoy=q.get('hoy')?new Date(q.get('hoy')+'T12:00:00'):new Date();
+  var D=decidir(S,ok?tec:0,ok?din:0,hoy);
+  pintar(D,ok);
+  if(ok){store('nq_tec',$('tec').value);store('nq_din',$('din').value);anotar(D);pintarHist();}
+  window.__D=D;
+}
+$('tec').value=q.get('tec')||store('nq_tec')||''; $('din').value=q.get('din')||store('nq_din')||'';
+['tec','din'].forEach(function(id){$(id).addEventListener('input',refrescar)});
+$('clear').addEventListener('click',function(){store('nq_hist','[]');pintarHist()});
+pintarHist();
+
+fetch('historico_maestro.csv',{cache:'no-store'})
+  .then(function(r){if(!r.ok) throw new Error('HTTP '+r.status);return r.text()})
+  .then(function(t){S=calcular(parseCSV(t));window.__S=S;refrescar();})
+  .catch(function(e){$('asof').textContent='sin datos';
+    $('out').innerHTML='<div class="banner act" role="alert"><b>No he podido cargar los datos</b> ('+esc(e.message)+'). Comprueba la conexión y que historico_maestro.csv esté en la misma carpeta que esta página.</div>';});
+})();
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){})});}
+</script>
+</body>
+</html>
